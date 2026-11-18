@@ -1,0 +1,22 @@
+{
+  "created_at": "2026-02-13T22:05:00Z",
+  "sha256": {
+    "equity_quotes.json": "0a3a89fd5fbc10e27f3895731807866f52566513c722c6a15e7a8c1513b283db",
+    "option_quotes.json": "bba73af8e7c6461685b0de27edf66c435b6edae9a58087b41e353ac679df92e3",
+    "options/a0000000-0000-4000-8000-000000000021/instrument.json": "95e70f4f508640c8f312c117fc27f8bc227d631e20703888d147509a75f57afb",
+    "options/a0000000-0000-4000-8000-000000000021/quote.json": "1b114564370947f204d64c7830a097f2c1c738b29c452f676bcd1ffead1c3de7",
+    "roth/equity_positions.json": "41295089fc3df84655e274f58642822c3d44131cf4bfa99bb92b6f103767bc65",
+    "roth/history.json": "ae57083f2ac4910831ab350271e25e5181ec56e76eb023f7655f57f11ce291c3",
+    "roth/option_positions.json": "91ed4f23c31638abafdfd824a009d2fad1adb720e2fe7c6a33187af9936373f4",
+    "roth/orders_pull/lookup_b0000006.json": "542cbe70d728e36a731e9e7252d0dd9843b40eac3f299963bbfefd783d59c802",
+    "roth/orders_pull/open_p1.json": "85b547079bf12a2f645700ed6fd822f9fa9dd0267466536eb4d2ec056d889a50",
+    "roth/orders_pull/window_p1.json": "bf8c5590d1190a1de172a55668840143bf56252469ec1fd886a3476f4a48bef8",
+    "roth/portfolio.json": "e16e462bae2f755756307a977bda501baf00fb42b126dbc01ec2aa696a1177c0",
+    "trad/equity_positions.json": "8b8e84aa808c699c8946ac2ee4b76e1ba4acec90f7f7f86327a987c4ba4a6991",
+    "trad/history.json": "99d7e2c4611e9bb9463990940f0d718e16cd65875b0802acfe88c70d75cf3185",
+    "trad/option_positions.json": "0f7bc593302654c9dd65a92e0e320f9c796b7551f9175d67b8fb1f2029d5a1c3",
+    "trad/orders_pull/open_p1.json": "6323b936ba00351755e50278476bde10d97803f63dd1c172364ee0aee298bc86",
+    "trad/orders_pull/window_p1.json": "d2814f4672a21b28f6a3a84d03473f7baf142c396593791af27aaefa871e803d",
+    "trad/portfolio.json": "97798ef887dd75c99aa6035d9b5951b3a468f87d0ea869e78d12c3ba41806808"
+  }
+}

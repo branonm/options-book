@@ -1,0 +1,4 @@
+[
+ {"asset_id":"a1","symbol":"AAA","exchange":"ARCA","asset_class":"us_equity","avg_entry_price":"42.1","qty":"300","qty_available":"300","side":"long","market_value":"13200","cost_basis":"12630"},
+ {"asset_id":"a2","symbol":"AAA270617C00055000","exchange":"","asset_class":"us_option","avg_entry_price":"2.3","qty":"-3","qty_available":"-3","side":"short","market_value":"-666","cost_basis":"-690"}
+]

@@ -1,0 +1,100 @@
+package main
+
+// syntheticRules is the synthetic book's rules.json: hand-written example values
+// (nothing copied from a real book), chosen so the fixtures have round numbers.
+const syntheticRules = `{
+  "_doc": "SYNTHETIC EXAMPLE RULES for the test suite. Every value is an illustration chosen so the fixtures have round numbers; none is a recommendation. A real book keeps its own numbers here: every numeric rule the tools enforce is read from this file.",
+
+  "covered_call_closer": {
+    "rule": 10,
+    "status": "example",
+    "fraction_of_fill": "0.50",
+    "time_in_force": "gtc",
+    "rounding": "up_to_tick",
+    "rounding_note": "The fraction is a ceiling on what the closer pays, so it never rounds below fraction × fill.",
+    "basis": "actual fill, or the blended fill if the block was built in more than one order"
+  },
+
+  "option_ticks": {
+    "rule": "Order entry",
+    "status": "penny under $3.00, nickel at or above; check the instrument's own tick rules",
+    "cutoff": "3.00",
+    "below_cutoff": "0.01",
+    "at_or_above_cutoff": "0.05"
+  },
+
+  "acquisition_put": {
+    "rule": 4,
+    "status": "example",
+    "closer_allowed": false
+  },
+
+  "roll_trigger": {
+    "rule": 3,
+    "status": "example",
+    "itm_and_max_dte": 10
+  },
+
+  "lot_size": {
+    "rule": "Hard constraint 3",
+    "shares_per_contract": 100
+  },
+
+  "delta_bands": {
+    "_status": "example bands; if the breakeven floor and the band conflict, the floor wins and delta goes lower",
+    "covered_call":    { "rule": "Quick reference / Rule 9", "min": "0.20", "max": "0.40" },
+    "acquisition_put": { "rule": "Rule 8",                   "min": "0.35", "max": "0.45" },
+    "income_put":      { "rule": "Rule 4b",                  "min": "0.20", "max": "0.40" }
+  },
+
+  "income_put_closer": {
+    "rule": "Rule 4b",
+    "fraction_of_fill": "0.60",
+    "time_in_force": "gtc"
+  },
+
+  "graded_clearance": {
+    "rule": 11,
+    "status": "example",
+    "confirmed": "synthetic", "interpretation": "Depth underwater = (basis - spot) / basis. Clearance = (strike - breakeven after this credit) / that breakeven. Depth <= near_basis_depth requires near_basis_min (warns below near_basis_target); depth >= deep_depth requires deep_min; linear in between.",
+    "near_basis_depth": "0.03",
+    "near_basis_min": "0.05",
+    "near_basis_target": "0.07",
+    "deep_depth": "0.12",
+    "deep_min": "0.01"
+  },
+
+  "min_open_interest": {
+    "rule": "Hard constraint 6",
+    "value": 50,
+    "confirmed": "synthetic", "interpretation": "An illustrative open-interest floor for a small exit."
+  },
+
+  "quote_window": {
+    "rule": "Hard constraint 7",
+    "timezone": "America/New_York",
+    "open": "09:30",
+    "close": "16:00",
+    "exclude_opening_minutes": 10,
+    "confirmed": "synthetic", "interpretation": "Opening-bell and after-hours quotes are not prices; the opening-bell length is an example."
+  },
+
+  "cooldown": {
+    "rule": 5,
+    "status": "example",
+    "losses": 3,
+    "within_sessions": 10,
+    "single_loss_share_of_pool": "0.02",
+    "freeze_sessions": 2,
+    "blocks": "new risk (new underlyings, new capital, size increases); never re-covering held shares, closing, or assignment"
+  },
+
+  "max_risk": {
+    "rule": 6,
+    "status": "example",
+    "per_position_cap": "0.10",
+    "aggregate_cap": "0.30",
+    "caps_apply_to": "defined-risk structures only; wheel tickets state max loss in $ and % of pool without a cap"
+  }
+}
+`

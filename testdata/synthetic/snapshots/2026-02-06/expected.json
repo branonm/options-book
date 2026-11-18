@@ -1,0 +1,10 @@
+{
+  "asof": "2026-02-06",
+  "source": "SYNTHETIC. Worked out by hand from testdata/synthetic/README.md; not tool output.",
+  "accounts": {
+    "roth": {"realized": "150", "open_credit": "650", "basis_credit": "0", "blocks": {"AAA": {"shares": 300, "premium": "600", "breakeven": "48.00"}, "BBB": {"shares": 100, "premium": "200", "breakeven": "78.00"}}},
+    "trad": {"realized": "100", "open_credit": "160", "basis_credit": "0", "blocks": {"CCC": {"shares": 200, "premium": "260", "breakeven": "38.70"}}}
+  },
+  "combined": {"realized_legs": 2},
+  "checkin": {"defects": [{"account": "roth", "check": "closer_price", "subject": "BBB $85c 2026-02-20", "expected": "$1.00", "actual": "$1.10"}], "alerts": []}
+}

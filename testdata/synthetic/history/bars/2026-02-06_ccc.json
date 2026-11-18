@@ -1,0 +1,4 @@
+{"_provenance": "SYNTHETIC. Shaped like get_equity_historicals(symbols=[CCC], interval=day, adjustment_type=none); only the expiration-day bar is kept.",
+ "data":{"results":[
+  {"symbol":"CCC","interval":"day","bounds":"regular","bars":[{"begins_at":"2026-01-30T00:00:00Z","open_price":"41.000000","close_price":"41.200000","high_price":"41.500000","low_price":"40.800000","volume":1000000,"session":"reg"}]}
+]}}

@@ -1,0 +1,9 @@
+{
+  "_doc": "EXAMPLE accounts. Identity is the last four characters only, never a full number; source is the broker adapter the account is read through; default_book names the book that owns it by default (null for none); modes are the ways an order may be entered (agentic, browser, manual). Replace these with your own.",
+  "accounts": [
+    {"name": "roth",    "label": "Roth IRA",        "last4": "0001", "source": "robinhood", "default_book": "ira-wheel",  "modes": ["browser", "manual"]},
+    {"name": "trad",    "label": "Traditional IRA", "last4": "0002", "source": "robinhood", "default_book": "ira-wheel",  "modes": ["browser", "manual"]},
+    {"name": "taxable", "label": "Taxable",         "last4": "0003", "source": "robinhood", "default_book": null,         "modes": ["browser", "manual"]},
+    {"name": "paper",   "label": "Alpaca paper",    "last4": "AB12", "source": "alpaca",    "default_book": "paper-wheel", "modes": ["manual"]}
+  ]
+}

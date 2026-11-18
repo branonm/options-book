@@ -1,0 +1,5 @@
+{"data":{"results":[
+{"quote":{"instrument_id":"a0000000-0000-4000-8000-000000000002","bid_price":"0.780000","ask_price":"0.820000","mark_price":"0.800000","implied_volatility":"0.250000","delta":"0.250000","open_interest":5000,"volume":100,"updated_at":"2026-02-06T21:00:00Z"}},
+{"quote":{"instrument_id":"a0000000-0000-4000-8000-000000000003","bid_price":"1.450000","ask_price":"1.550000","mark_price":"1.500000","implied_volatility":"0.250000","delta":"0.300000","open_interest":5000,"volume":100,"updated_at":"2026-02-06T21:00:00Z"}},
+{"quote":{"instrument_id":"a0000000-0000-4000-8000-000000000012","bid_price":"0.380000","ask_price":"0.420000","mark_price":"0.400000","implied_volatility":"0.250000","delta":"0.200000","open_interest":5000,"volume":100,"updated_at":"2026-02-06T21:00:00Z"}}
+]}}

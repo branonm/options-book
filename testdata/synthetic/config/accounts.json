@@ -1,0 +1,8 @@
+{
+  "_doc": "SYNTHETIC. Two fictional accounts; nothing here is real.",
+  "accounts": [
+    {"name": "roth", "label": "Roth IRA",        "last4": "0001", "source": "robinhood", "default_book": "ira-wheel", "modes": ["browser", "manual"]},
+    {"name": "trad", "label": "Traditional IRA", "last4": "0002", "source": "robinhood", "default_book": "ira-wheel", "modes": ["browser", "manual"]},
+    {"name": "taxable", "label": "Taxable", "last4": "0003", "source": "robinhood", "default_book": null, "modes": ["browser", "manual"]}
+  ]
+}

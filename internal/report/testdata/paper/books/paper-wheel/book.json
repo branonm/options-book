@@ -1,0 +1,7 @@
+{
+  "strategy": "wheel",
+  "campaign_start": "2026-11-01",
+  "accounts": [
+    {"name": "paper", "pool": "paper", "expected_symbols": ["AAA"]}
+  ]
+}

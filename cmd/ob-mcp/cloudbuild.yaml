@@ -1,0 +1,12 @@
+# Builds the ob-mcp image in Cloud Build. Run from the repo root:
+#
+#   gcloud builds submit --config cmd/ob-mcp/cloudbuild.yaml \
+#     --substitutions=_IMAGE=us-east1-docker.pkg.dev/PROJECT/options-book/ob-mcp:$(git rev-parse --short HEAD),_COMMIT=$(git rev-parse HEAD) .
+#
+# Then set `image` in infra/gcp/terraform.tfvars and `terraform apply`.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "cmd/ob-mcp/Dockerfile", "--build-arg", "COMMIT=${_COMMIT}", "-t", "${_IMAGE}", "."]
+images: ["${_IMAGE}"]
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -1,0 +1,19 @@
+{
+  "created_at": "2026-02-06T22:05:00Z",
+  "sha256": {
+    "equity_quotes.json": "9cc31254d757d075e717afb24fccd75c8182119ce4f3850db0f1ec2e2d4db45f",
+    "option_quotes.json": "48c0c683ab32ad4e00c436a3098ba481234a6b6a568f50c5e2f86183e0a2b2cc",
+    "options/a0000000-0000-4000-8000-000000000021/instrument.json": "95e70f4f508640c8f312c117fc27f8bc227d631e20703888d147509a75f57afb",
+    "options/a0000000-0000-4000-8000-000000000021/quote.json": "f13f9a5c348114a4223634de92518105c7c39f8eff70782eeddc53e5a93b55af",
+    "roth/equity_positions.json": "41295089fc3df84655e274f58642822c3d44131cf4bfa99bb92b6f103767bc65",
+    "roth/history.json": "9900fe67722466c394112e066703f83e8099b53febf7dfc7c7812a541a55d37e",
+    "roth/option_positions.json": "e9cc03a861e51b669b9d462f1e02f18bc931bba8e302aa9bffa2e9cfaf476d3a",
+    "roth/orders_pull/full_p1.json": "838622ca9f03747038d4bf4fc02bba812c0fe76b83e5d91739803783b6fa03a0",
+    "roth/portfolio.json": "d9cc5d3364c57d381e6724bf2141d2edc33eb2da55b15530017ac66d208141a9",
+    "trad/equity_positions.json": "8b8e84aa808c699c8946ac2ee4b76e1ba4acec90f7f7f86327a987c4ba4a6991",
+    "trad/history.json": "0aafabffc96c89bf91fa3bdc4a1f4950bf7a9393284ce0a94442ef8569742071",
+    "trad/option_positions.json": "0f7bc593302654c9dd65a92e0e320f9c796b7551f9175d67b8fb1f2029d5a1c3",
+    "trad/orders_pull/full_p1.json": "d2c993cff9ff9a183e8de84ee51204b51e5a7e3f4c9867b09323f1e2ba443caf",
+    "trad/portfolio.json": "c585f295ec239bf32e2d6a0cde74fff9d4993c9f447033281b2b2307ac364060"
+  }
+}

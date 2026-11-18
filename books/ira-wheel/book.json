@@ -1,0 +1,9 @@
+{
+  "strategy": "wheel",
+  "doc": "wheel-book.md",
+  "campaign_start": "2026-01-05",
+  "accounts": [
+    {"name": "roth", "pool": "roth",        "expected_symbols": ["AAA", "BBB"]},
+    {"name": "trad", "pool": "traditional", "expected_symbols": ["CCC"]}
+  ]
+}

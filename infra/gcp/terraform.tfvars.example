@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+project_id      = "my-project-xxxxxx"
+billing_account = "XXXXXX-XXXXXX-XXXXXX"
+oauth_client_id = "NNNN-xxxx.apps.googleusercontent.com"
+allowed_email   = "maintainer@example.com"
+# image is set on the second apply, after the first build:
+# image = "us-east1-docker.pkg.dev/my-project-xxxxxx/options-book/gcpping:v1"

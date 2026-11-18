@@ -1,0 +1,5 @@
+{"data":{"results":[
+{"quote":{"symbol":"AAA","last_trade_price":"53.000000","venue_last_trade_time":"2026-02-13T21:00:00Z","state":"active"}},
+{"quote":{"symbol":"BBB","last_trade_price":"83.000000","venue_last_trade_time":"2026-02-13T21:00:00Z","state":"active"}},
+{"quote":{"symbol":"CCC","last_trade_price":"42.000000","venue_last_trade_time":"2026-02-13T21:00:00Z","state":"active"}}
+]}}

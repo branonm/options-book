@@ -1,0 +1,15 @@
+{
+  "_doc": "How contracts that ran through expiration without a closing order finished: the underlying's regular-session close on the expiration date. In the money = assigned. Append-only; written by `wheel expirations`.",
+  "contracts": [
+    {
+      "contract": "CCC $44c 2026-01-30",
+      "symbol": "CCC",
+      "type": "call",
+      "strike": "44",
+      "expiry": "2026-01-30",
+      "underlying_close": "41.2",
+      "outcome": "expired_worthless",
+      "source": "CCC day bar 2026-01-30 (history/bars/2026-02-06_ccc.json)"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+# What `gcloud builds submit .` uploads to Cloud Build. An allow-list: only
+# the code images are built from. snapshots/, history/ and reconcile/ hold
+# real trading data and must never be in a build upload.
+/*
+!/go.mod
+!/go.sum
+!/config/
+!/books/
+!/internal/
+!/cmd/
+!/spike/

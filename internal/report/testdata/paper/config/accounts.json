@@ -1,0 +1,6 @@
+{
+  "_doc": "Synthetic fixture for item 6 step 4: one Alpaca paper account. last4 is a placeholder (Alpaca paper has no account number to match).",
+  "accounts": [
+    {"name": "paper", "label": "Alpaca paper", "last4": "0000", "source": "alpaca", "default_book": "paper-wheel", "modes": ["manual"]}
+  ]
+}
