@@ -13,6 +13,24 @@ spreads, is what would show what is generic. Open questions: where block premium
 belong (today in `internal/strategy/wheel`), and how `internal/risk` (position caps for proposals the
 wheel ticket does not cover) fits in.
 
+A spread monitor would sit on top of that: cost to close at mid and at the natural price against a
+trigger, plus entry gates, for an account that holds spreads. It needs the multi-leg ledger first.
+
+## Placed order versus ticket
+
+`ob ticket` proposes an order and its closer, but nothing checks that the order that was later
+placed is the one proposed. The idea: a create-only `ticket` record (id, account, kind, legs by OCC
+symbol, side and effect, quantity, limit, time in force, the closer, the modes offered, creation time
+and the sha256 of its inputs). `ob checkin` would then match each new order in the log to a ticket
+(same account, contract and side/effect, created after the ticket). Any difference in contract,
+quantity, limit or time in force, or a missing closer, is a defect; an order with no ticket is an
+alert. It must work on every entry path, so hand-entry mistakes are caught too. On a source whose
+guarantees do not include open orders the check reports `cannot_verify`, never a pass.
+
+Related and already built: an account's `modes` in `config/accounts.json` (`agentic`, `browser`,
+`manual`) decide which execution blocks a ticket carries. `agentic` comes from config only, because
+the server cannot see which account an agent's own connector may trade.
+
 ## More than one book per account
 
 Accounts hold the data and books make claims on it, but a book may only cover accounts it is the
@@ -52,6 +70,21 @@ it) and have the ticket read it.
 The Robinhood entry checklist lists the web form's fields in a fixed order that has not been
 checked against the live form (`internal/broker/robinhood/entry.go`). Nothing in the repo can check
 a web page, so this needs someone with an account to compare.
+
+## Rule backtest, in the repo
+
+A backtest of a rule's closer target (for example the fraction of premium the closer buys back) that
+can be re-run as the closed-leg count grows. It needs enough expired legs to say anything, so it waits
+on data, and it should read only stored order history, like the ledger.
+
+## Research data
+
+Daily bars, option chains and rate series from free providers (for example OpenBB Platform run
+locally as a REST server), stored as raw responses with a sha256 manifest, with every computation a
+pure function of the saved files. First outputs: implied over realized volatility at the strike
+being considered, a daily MACD histogram for a timing gate, rolling correlations, and rate series to
+give a rates-driver rule numeric thresholds. **Research only**: never a source for ledger figures,
+tickets or quotes, since spread and open interest are still confirmed at the broker.
 
 ## Housekeeping (good first issues)
 
