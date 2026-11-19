@@ -128,3 +128,39 @@ func TestCompiledInConfig(t *testing.T) {
 		t.Errorf("%d books compiled in for %d on disk; default %q", len(deps.Books), dirs, deps.DefaultBook)
 	}
 }
+
+// The store is chosen by configuration; Firestore stays the default. Nothing
+// here reaches a network: the Cloud SQL and Firestore constructors are not
+// called on these paths.
+func TestStoreSelection(t *testing.T) {
+	if _, err := newDepsStore("p", "(default)", "", storeConfig{Kind: "mysql"}, time.Minute); err == nil ||
+		!strings.Contains(err.Error(), "want firestore, cloudsql or postgres") {
+		t.Errorf("an unknown store: %v", err)
+	}
+	if _, err := newDepsStore("p", "(default)", "", storeConfig{Kind: "cloudsql", Instance: "p:r:i"}, time.Minute); err == nil {
+		t.Error("cloudsql without a database and user was accepted")
+	}
+	if _, err := newDepsStore("p", "(default)", "", storeConfig{Kind: "postgres"}, time.Minute); err == nil {
+		t.Error("postgres without a DSN was accepted")
+	}
+}
+
+func TestStorePostgresLocal(t *testing.T) {
+	dsn := os.Getenv("POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("POSTGRES_DSN not set")
+	}
+	deps, err := newDepsStore("p", "(default)", "", storeConfig{Kind: "postgres", DSN: dsn}, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deps.Spec != "postgres" {
+		t.Errorf("spec %q, want postgres (the DSN must not be shown)", deps.Spec)
+	}
+	if deps.Vault != nil {
+		t.Error("a local postgres store was given Secret Manager credentials")
+	}
+	if _, ok := deps.DB.(*store.Postgres); !ok {
+		t.Errorf("the store is a %T", deps.DB)
+	}
+}

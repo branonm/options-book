@@ -34,3 +34,37 @@ variable "allowed_email" {
   type        = string
   sensitive   = true
 }
+
+variable "enable_cloudsql" {
+  description = "Create the Cloud SQL (PostgreSQL) store. Off by default: see cloudsql.tf and docs/cloud-sql-design.md."
+  type        = bool
+  default     = false
+}
+
+variable "store_backend" {
+  description = "Which store the server uses: firestore (the default) or cloudsql. Switching to cloudsql needs enable_cloudsql and a migrated, imported database."
+  type        = string
+  default     = "firestore"
+  validation {
+    condition     = contains(["firestore", "cloudsql"], var.store_backend)
+    error_message = "store_backend must be firestore or cloudsql."
+  }
+}
+
+variable "cloudsql_tier" {
+  description = "Cloud SQL machine tier. The smallest shared-core tier is enough for one user."
+  type        = string
+  default     = "db-f1-micro"
+}
+
+variable "cloudsql_database" {
+  description = "Name of the database inside the Cloud SQL instance."
+  type        = string
+  default     = "options_book"
+}
+
+variable "cloudsql_budget_usd" {
+  description = "Monthly budget amount (whole USD) once Cloud SQL is enabled, replacing the $1 guard. Set it after checking Google's current pricing."
+  type        = string
+  default     = "15"
+}

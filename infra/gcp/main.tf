@@ -153,6 +153,20 @@ resource "google_cloud_run_v2_service" "mcp" {
         name  = "PROJECT_ID"
         value = var.project_id
       }
+      # Which store the server reads and writes. Firestore (no STORE variable) is
+      # the default; "cloudsql" is the switch in docs/cloud-sql-design.md, step 5.
+      dynamic "env" {
+        for_each = var.store_backend == "cloudsql" ? {
+          STORE             = "cloudsql"
+          CLOUDSQL_INSTANCE = google_sql_database_instance.main[0].connection_name
+          CLOUDSQL_DATABASE = var.cloudsql_database
+          CLOUDSQL_USER     = local.server_db_user
+        } : {}
+        content {
+          name  = env.key
+          value = env.value
+        }
+      }
     }
   }
   depends_on = [google_project_service.apis, google_project_iam_member.mcp_insert_only]
@@ -162,6 +176,10 @@ resource "google_cloud_run_v2_service" "mcp" {
   # permanent diff that hides real ones. Our scaling is template.scaling above.
   lifecycle {
     ignore_changes = [scaling]
+    precondition {
+      condition     = var.store_backend != "cloudsql" || var.enable_cloudsql
+      error_message = "store_backend = \"cloudsql\" needs enable_cloudsql = true."
+    }
   }
 }
 
@@ -184,7 +202,7 @@ resource "google_billing_budget" "guard" {
   amount {
     specified_amount {
       currency_code = "USD"
-      units         = "1"
+      units         = var.enable_cloudsql ? var.cloudsql_budget_usd : "1"
     }
   }
   threshold_rules { threshold_percent = 0.5 }

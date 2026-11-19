@@ -73,7 +73,7 @@ regenerates the whole tree.
 | `ob history plan` / `add` | the append-only order log, pulled incrementally |
 | `ob expirations` | record how contracts that ran through expiration finished |
 | `ob reconcile` | the ledger against the broker's own realized option P&L |
-| `ob db` | import, export and verify a store (a Firestore database or its emulator) |
+| `ob db` | import, export, verify, migrate and check a store (Firestore or its emulator, or PostgreSQL / Cloud SQL) |
 | `ob cred` | manage the broker credentials the server uses |
 
 ## Accounts, books and rules

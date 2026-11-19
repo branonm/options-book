@@ -84,9 +84,11 @@ func usage() {
   ob history add  --account NAME --observed RFC3339 (--created-since YYYY-MM-DD | --full) --pull PAGE1[,PAGE2...] [--pull ...] [--snapshot DIR]
   ob expirations --snapshot DIR [--bars FILE]   (list unresolved expirations, or record them from saved day bars)
   ob reconcile --snapshot DIR --pnl ACCOUNT=FILE [--pnl ...]   (ledger vs Robinhood realized option P&L; exits 1 on a mismatch)
-  ob db import (--emulator HOST:PORT | --project ID) (--from-repo DIR | --from-export DIR)
-  ob db export (--emulator HOST:PORT | --project ID) --to DIR
-  ob db verify (--emulator HOST:PORT | --project ID)
+  ob db import (--emulator HOST:PORT | --project ID | --postgres DSN | --cloudsql INSTANCE/DATABASE/USER) (--from-repo DIR | --from-export DIR)
+  ob db export (--emulator HOST:PORT | --project ID | --postgres DSN | --cloudsql INSTANCE/DATABASE/USER) --to DIR
+  ob db verify (--emulator HOST:PORT | --project ID | --postgres DSN | --cloudsql INSTANCE/DATABASE/USER)
+  ob db migrate (--postgres DSN | --cloudsql INSTANCE/DATABASE/USER) [--server-role ROLE]
+  ob db check-append-only (--postgres DSN | --cloudsql INSTANCE/DATABASE/USER)   (tries UPDATE, DELETE, TRUNCATE; rolled back)
   ob db list   (--emulator HOST:PORT | --project ID)
   ob db show   (--emulator HOST:PORT | --project ID) --snapshot ID [--raw FILE ...]
   ob cred enroll robinhood|alpaca-paper --project ID   (sign in / paste the key; stores a new secret version)

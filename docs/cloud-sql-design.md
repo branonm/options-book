@@ -115,6 +115,69 @@ $0.00, the check-in acceptance tests, the tool-versus-CLI match and `TestCheckin
 Steps 1 and 2 are offline and touch no live system. Steps 3 to 6 touch the live server, and each
 waits for the owner's go-ahead.
 
+## Status
+
+- **Steps 1 and 2: built and passing** against a local PostgreSQL 16, including the real-data tests
+  in the private copy of the repository.
+- **Steps 3 to 5: prepared, nothing run.** The code and Terraform exist and are tested offline
+  (`terraform validate` passes), but no instance has been created, no data moved and no server
+  switched. What was *not* tested: the Cloud SQL connector (`internal/store/cloudsql.go`) has never
+  connected to a real instance, and `terraform plan` has not been run against the live project.
+- **Step 6: not started.** It deletes the Firestore database and waits until the owner chooses.
+
+What was added for 3 to 5:
+
+- `store.NewCloudSQL`: the Cloud SQL Go connector with IAM database authentication.
+- `ob db`: `--postgres DSN` and `--cloudsql INSTANCE/DATABASE/USER` for `import`, `export`, `verify`,
+  `list` and `show`; `migrate [--server-role ROLE]`; and `check-append-only`. A DSN is never printed.
+- `ob-mcp`: `STORE=cloudsql` with `CLOUDSQL_INSTANCE`, `CLOUDSQL_DATABASE` and `CLOUDSQL_USER`.
+  Without `STORE` it uses Firestore, as today.
+- `infra/gcp/cloudsql.tf` and variables: everything is off while `enable_cloudsql = false` (the
+  default), so applying the Terraform unchanged creates nothing. `store_backend = "cloudsql"` points
+  the server at it, and refuses to plan unless `enable_cloudsql` is also set.
+
+## Runbook for steps 3 to 6
+
+The owner runs every command that changes a live system. Run Terraform from the directory that holds
+your Terraform state.
+
+**Step 3: infrastructure.**
+1. Set `enable_cloudsql = true` and `cloudsql_budget_usd` (after checking Google's current pricing) in
+   `terraform.tfvars`. Leave `store_backend` as `firestore`.
+2. `terraform plan`. Expect: the Cloud SQL API, the instance, the database, two IAM database users,
+   four IAM bindings and a changed budget, and **no change to the Cloud Run service**. Stop if the
+   plan shows anything else.
+3. `terraform apply`.
+4. Create the schema as the owner, then grant the server: `ob db migrate --cloudsql
+   <connection name>/<database>/<your Google account> --server-role <server user>`. Both values come
+   from the Terraform outputs. **Unverified:** whether a Cloud SQL IAM user may create tables in the
+   `public` schema of a new database. If the migration fails with a permission error on that schema,
+   grant it once as the built-in `postgres` user, then run the migration again.
+5. Show the grants hold: `ob db check-append-only --cloudsql <connection name>/<database>/<server
+   user>`. It must report that all three statements are refused. Run it with the server's
+   service-account credentials (impersonation), since it checks the connected user.
+
+**Step 4: move the data.**
+1. `ob db export --project <project> --to <empty dir>` from Firestore.
+2. `ob db import --cloudsql <...>/<owner> --from-export <dir>`, which ends with a full verify.
+3. `ob db export --cloudsql <...>/<owner> --to <second empty dir>` and compare the two directories
+   with `diff -r`. They must be identical. Firestore is untouched throughout.
+
+**Step 5: switch the server.**
+1. Build and deploy an image containing this code **before** changing `store_backend`, so the service
+   understands `STORE`.
+2. Set `store_backend = "cloudsql"`, `terraform plan` (expect only the Cloud Run environment to
+   change), then apply.
+3. Check the new revision logs `store cloudsql=...`, an unauthenticated POST to `/mcp` still gets
+   401, and `verify` and `list_snapshots` through the connector read the same data as before.
+4. Do one live check-in through the server, as in the phase 4 gate.
+5. **Rollback:** set `store_backend` back to `firestore` and apply. Nothing was removed from
+   Firestore, so this restores the previous state, apart from anything written to Cloud SQL since.
+
+**Step 6: retire Firestore.** Only after a period the owner chooses, and after keeping a last
+Firestore export. Remove the Firestore database and its insert-only role in Terraform. This cannot be
+undone.
+
 ## Effect on other docs (when decided)
 
 - `ARCHITECTURE.md`, "Storage and credentials": the insert-only IAM role becomes the three layers

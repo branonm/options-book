@@ -27,7 +27,8 @@ import (
 // value, {"s": "text"}, {"i": "123"}, {"b": true} or {"x": "<base64>"}, so an
 // int64 never becomes a float and a []byte comes back exactly.
 type Postgres struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	onClose func() // releases whatever the pool was dialled through (the Cloud SQL connector)
 }
 
 //go:embed postgres_schema.sql
@@ -55,7 +56,12 @@ func NewPostgres(ctx context.Context, dsn, schema string) (*Postgres, error) {
 }
 
 // Close releases the connections.
-func (p *Postgres) Close() { p.pool.Close() }
+func (p *Postgres) Close() {
+	p.pool.Close()
+	if p.onClose != nil {
+		p.onClose()
+	}
+}
 
 // Migrate creates the table, the trigger that refuses UPDATE, DELETE and
 // TRUNCATE, and, when serverRole is not empty, grants that role SELECT and
@@ -261,6 +267,37 @@ func (p *Postgres) reapScratch(ctx context.Context) error {
 		if _, err := p.pool.Exec(ctx, "DROP SCHEMA IF EXISTS "+pgx.Identifier{name}.Sanitize()+" CASCADE"); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// CheckAppendOnly tries UPDATE, DELETE and TRUNCATE as the connected user and
+// returns an error naming any the database allowed. Each is tried in a
+// transaction that is always rolled back, so even a statement that is allowed
+// changes nothing. Run it as the server's user to show the grants hold
+// (docs/cloud-sql-design.md, step 3). With an empty table the trigger layer has
+// no row to refuse, so only the privilege layer is exercised.
+func (p *Postgres) CheckAppendOnly(ctx context.Context) error {
+	var allowed []string
+	for _, stmt := range []string{
+		`UPDATE doc SET fields = fields`,
+		`DELETE FROM doc`,
+		`TRUNCATE doc`,
+	} {
+		tx, err := p.pool.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		_, execErr := tx.Exec(ctx, stmt)
+		if err := tx.Rollback(ctx); err != nil {
+			return fmt.Errorf("rolling back %q: %w", stmt, err)
+		}
+		if execErr == nil {
+			allowed = append(allowed, strings.Fields(stmt)[0])
+		}
+	}
+	if len(allowed) > 0 {
+		return fmt.Errorf("the database allowed %s (each was rolled back; nothing changed)", strings.Join(allowed, ", "))
 	}
 	return nil
 }

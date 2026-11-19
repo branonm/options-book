@@ -335,3 +335,32 @@ func TestPostgresExportMatchesMemory(t *testing.T) {
 	}
 	t.Logf("%d export files identical", len(want))
 }
+
+func TestPostgresCheckAppendOnly(t *testing.T) {
+	p := scratchDB(t)
+	ctx := context.Background()
+	if err := p.Create(ctx, "chk", "x", Doc{"v": "kept"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.CheckAppendOnly(ctx); err != nil {
+		t.Fatalf("with the trigger in place: %v", err)
+	}
+
+	// Take the trigger away: the check must say so, and must change nothing.
+	for _, stmt := range []string{
+		`ALTER TABLE doc DISABLE TRIGGER doc_no_update_delete`,
+		`ALTER TABLE doc DISABLE TRIGGER doc_no_truncate`,
+	} {
+		if _, err := p.pool.Exec(ctx, stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := p.CheckAppendOnly(ctx)
+	if err == nil || !strings.Contains(err.Error(), "UPDATE") || !strings.Contains(err.Error(), "DELETE") || !strings.Contains(err.Error(), "TRUNCATE") {
+		t.Fatalf("without the trigger: %v, want all three reported", err)
+	}
+	got, gerr := p.Get(ctx, "chk", "x")
+	if gerr != nil || got["v"] != "kept" {
+		t.Fatalf("the check changed the data: %v, %v", got, gerr)
+	}
+}
