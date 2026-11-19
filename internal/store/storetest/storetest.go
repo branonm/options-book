@@ -6,6 +6,8 @@
 //	memory     the repo imported into the in-memory store and read back
 //	emulator   the repo imported into the Firestore emulator and read back;
 //	           only when FIRESTORE_EMULATOR_HOST is set (see README)
+//	postgres   the repo imported into a scratch schema of a PostgreSQL database
+//	           and read back; only when POSTGRES_DSN is set (see README)
 package storetest
 
 import (
@@ -69,6 +71,9 @@ var (
 	emuOnce sync.Once
 	emuFS   fs.FS
 	emuErr  error
+	pgOnce  sync.Once
+	pgFS    fs.FS
+	pgErr   error
 )
 
 // Sources returns every available source. The imported ones are built once
@@ -98,7 +103,30 @@ func Sources(t testing.TB) []Source {
 	} else {
 		t.Log("FIRESTORE_EMULATOR_HOST not set: the emulator source is skipped")
 	}
+
+	if dsn := os.Getenv("POSTGRES_DSN"); dsn != "" {
+		pgOnce.Do(func() { pgFS, pgErr = importedPostgres(dsn, disk) })
+		if pgErr != nil {
+			t.Fatalf("postgres source: %v", pgErr)
+		}
+		out = append(out, Source{Name: "postgres", FS: pgFS})
+	} else {
+		t.Log("POSTGRES_DSN not set: the postgres source is skipped")
+	}
 	return out
+}
+
+// importedPostgres imports the repo into a scratch schema of the database the
+// DSN names and reads it back. The schema is left for the next run's cleanup
+// (store.ScratchPostgres removes any older than an hour), because nothing here
+// knows when the last test in the binary is done with it.
+func importedPostgres(dsn string, disk fs.FS) (fs.FS, error) {
+	ctx := context.Background()
+	db, _, err := store.ScratchPostgres(ctx, dsn)
+	if err != nil {
+		return nil, err
+	}
+	return imported(db, disk)
 }
 
 func imported(db store.DB, disk fs.FS) (fs.FS, error) {

@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 // Doc is one document's fields. Values are string, int64, bool or []byte
@@ -102,6 +103,25 @@ func checkID(coll, id string) error {
 		(strings.HasPrefix(id, "__") && strings.HasSuffix(id, "__")) || len(id) > 1500 {
 		return fmt.Errorf("%s: invalid document id %q", coll, id)
 	}
+	if err := checkText(coll); err != nil {
+		return fmt.Errorf("collection %q: %w", coll, err)
+	}
+	if err := checkText(id); err != nil {
+		return fmt.Errorf("%s: document id %q: %w", coll, id, err)
+	}
+	return nil
+}
+
+// checkText refuses what PostgreSQL's text and jsonb cannot hold: a NUL, and
+// bytes that are not valid UTF-8. Every backend refuses it, so a value that
+// works in memory cannot fail only once it reaches the real store.
+func checkText(s string) error {
+	if strings.IndexByte(s, 0) >= 0 {
+		return errors.New("contains a NUL character")
+	}
+	if !utf8.ValidString(s) {
+		return errors.New("is not valid UTF-8")
+	}
 	return nil
 }
 
@@ -112,8 +132,14 @@ func checkDoc(d Doc) error {
 	n := 0
 	for k, v := range d {
 		n += len(k) + 1
+		if err := checkText(k); err != nil {
+			return fmt.Errorf("field name %q: %w", k, err)
+		}
 		switch v := v.(type) {
 		case string:
+			if err := checkText(v); err != nil {
+				return fmt.Errorf("field %s: %w", k, err)
+			}
 			n += len(v) + 1
 		case []byte:
 			n += len(v)
