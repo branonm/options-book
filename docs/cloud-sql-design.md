@@ -55,10 +55,12 @@ CREATE TABLE doc (
   adding or changing one never touches stored data. A real table per collection can follow
   if a query needs one.
 
-**Open question:** should `fields` be `jsonb` (queryable, but Postgres normalises key order
-and whitespace) or `bytea` holding the exact encoding? Nothing hashes the stored encoding
-(the hashes cover response bodies, which come back byte for byte either way), so `jsonb`
-looks safe. The export → import → export check in step 4 would prove it.
+**`fields` is `jsonb`** (owner, 2026-11-19), not `bytea` holding the exact encoding. Postgres
+normalises key order, whitespace and escapes and keeps only the last of duplicate keys, but
+nothing hashes the stored encoding: the hashes cover response bodies, which come back byte
+for byte either way. The export → import → export check in step 4 proves the round trip.
+One `jsonb` limit needs a guard: it can't hold a null character (`\u0000`) in a string, so
+`checkDoc` refuses such a string for every backend, with an error that names the field.
 
 ## Append-only, enforced outside the server's code
 
@@ -105,7 +107,7 @@ files on every source, the diff and reconcile tests, `TestToolsMatchCLI` and
 
 | Step | Work | Pass condition |
 |---|---|---|
-| 1. Backend | `internal/store/postgres.go` implementing `DB`; the schema, grants and trigger as embedded SQL | The store's unit tests pass against a local PostgreSQL 16 (`POSTGRES_DSN` set): `ErrExists`, `List` order, and every value type round-tripping |
+| 1. Backend | `internal/store/postgres.go` implementing `DB`; the schema, grants and trigger as embedded SQL | The store's unit tests pass against a local PostgreSQL 16 (`POSTGRES_DSN` set): `ErrExists`, `List` order, every value type round-tripping, and `checkDoc` refusing a string with a null character |
 | 2. Every source | `storetest.Sources` adds `postgres` when `POSTGRES_DSN` is set, like `emulator` with `FIRESTORE_EMULATOR_HOST` | Every test that loops over `storetest.Sources` passes on `files`, `memory`, `emulator` and `postgres` |
 | 3. Infrastructure | Terraform: the instance, the IAM database user, `roles/cloudsql.client` for the server's service account, the raised budget | The owner runs `terraform apply`. A test connecting as the server's user shows `UPDATE` and `DELETE` refused |
 | 4. Move the data | `ob db export` from Firestore → `ob db import` into Cloud SQL → `ob db verify` | The Cloud SQL export is **byte-identical** to the Firestore export |
