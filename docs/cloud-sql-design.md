@@ -1,8 +1,8 @@
-# Store on Cloud SQL (PostgreSQL) — DRAFT for review
+# Store on Cloud SQL (PostgreSQL)
 
-**Status:** direction decided 2026-11-19 by the owner: stay on GCP and replace Firestore with
-Cloud SQL for PostgreSQL. No third-party database. **Everything below is a proposal until the
-owner marks it decided.**
+**Status: decided 2026-11-19 by the owner; not started.** Stay on GCP and replace Firestore
+with Cloud SQL for PostgreSQL. No third-party database. Steps 1–2 may start at any time;
+steps 3–6 each wait for the owner's go-ahead.
 
 ## Why
 
