@@ -116,6 +116,47 @@ Breaking one of these is how a wrong number reaches a document.
    `YYYY-MM-DDTHH:MM`). Nothing derives an as-of date from the clock (B1, B3).
 9. **Legs before `campaign_start` (2026-08-19) are excluded** from realized premium.
 
+## Bugs behind the invariants (B1–B8)
+
+Code comments and tests cite these by number (B1, B2, …). Each was a tool bug, fixed by a
+commit with a regression test; the number is kept so the comment still leads somewhere.
+(A **tool bug** is a mistake in this code. A **defect** is a problem with an order in a
+broker account, found by `ob checkin`. They are different things.)
+
+- **B1 — one parser for snapshot ids.** `diff` once rejected an intraday id (`2026-11-10T1012`)
+  that every other command accepted. Now `snapshot.ParseID` is the only parser, so a form
+  can't be valid for one command and invalid for another. Two intraday ids on one session
+  order by time; a date-only id and an intraday id on the same session are refused as
+  ambiguous. Test: `TestSnapshotIDsAcceptedByEverySubcommand`.
+- **B2 — a sealed snapshot takes no writes.** `history add --snapshot` once wrote into a
+  folder that already had a `manifest.json`, breaking its own seal. The check must come
+  *before* the log is appended; refusing only when writing `history.json` would leave the
+  log ahead of the snapshot. Test: `TestHistoryAddRefusesSealedSnapshot`.
+- **B3 — nothing dates a figure by the clock.** A snapshot name that wasn't a plain date
+  fell back to `time.Now()`, so days to expiry, the Rule 3 trigger and the Rule 5 cooldown
+  were computed against the day the command ran, with no error. Now an unrecognised name is
+  an error and the as-of date is the id's session date. Test: `TestUnknownSnapshotNameIsRefused`.
+- **B4 and B8 — tests must not depend on data that keeps growing.** Tests that read the
+  order log, or counted snapshots, as it stands now broke at the next check-in, though the
+  code was right. Pin a test to the log as it stood (`repoAt` in `cmd/ob/mcp_write_test.go`),
+  or count from the repo instead of writing the count down.
+- **B6 — don't gate on a source IP behind Cloud Run.** On the default `*.run.app` ingress
+  `X-Forwarded-For` arrived as the literal `0.0.0.0` for every real request, so an
+  allowlist of the caller's published address ranges blocked everything. The access control
+  is the token plus the allowed-account check; the source is logged, never a gate.
+  Test: `TestSourceIsNeverAGate`.
+- **B7 — a Claude connector shows `structuredContent`, not `content`.** A tool that
+  returned its report as text content and only `{exit_code, run_id}` as typed output showed
+  the model no figures at all, while a client that reads `content` saw everything. Every tool
+  puts the report in the structured `output` (and a refusal in `error`, with `IsError`);
+  `expose` in `internal/obmcp/tools.go` applies this to all tools, so a new one can't miss it.
+  The test helper `callTool` reads results the way the connector does and fails if the
+  structured output is missing or differs from the text. A new tool must go through it.
+
+Not a bug but worth knowing: snapshots made before the order log existed each carry a
+full copy of the order pull, about 94% of their size. A snapshot made with
+`history add --snapshot` carries a prefix reference instead.
+
 ## Adding a check
 
 Checks are **methods on the domain model**, not a separate linter pass — that was a
@@ -193,6 +234,42 @@ config path, or a snapshot file name such as `"equity_quotes.json"` in non-test 
 `layout.Snapshot(id)`, `layout.Log(acct)`, `layout.EquityQuotes` and so on. Tests use
 `layout.BookConfig` / `layout.RulesConfig` rather than naming the config files, so moving them
 (item 6 step 3b) touches no test. `TestNoPathLiterals` enforces it for non-test code.
+
+## Storage and credentials: why it is built this way
+
+The server (`ob-mcp`, Cloud Run) keeps its data in Firestore. That store is the agent's
+**memory**, not only a copy of broker snapshots: every figure-producing call records a
+create-only `run` document, and later phases are meant to hold the agent's recommendations,
+risk checks and staged proposals the same way, so a later session can read them back.
+
+- **Append-only is enforced outside the code.** The server's service account has a custom
+  IAM role (`wheelMcpInsertOnly`, `infra/gcp/main.tf`) with `datastore.entities.get`, `list`
+  and `create` and **no `update` or `delete`**. Every write is therefore a create with a
+  "must not exist" precondition, and sealing a snapshot is itself a create, so it happens
+  once and cannot be undone. A bug in the code cannot rewrite history, because the platform
+  refuses it.
+- **Credentials have one writer.** The server reads the latest version of each secret and
+  nothing else in Secret Manager. Only a separate job (`wheel-cred-refresher`, role in
+  `infra/gcp/credentials.tf`, no Firestore access) writes the Robinhood token, so the server
+  never refreshes and there are no races. Each refresh adds a version, disables the previous
+  one and destroys older ones, keeping at most two. A token is never printed, only its
+  version and expiry.
+- **A broker token on the server is acceptable only because of its limits.** The Robinhood
+  client calls a compiled-in allowlist of read tools (`internal/rhmcp`), and
+  `TestAllowlistIsReadOnly` fails the build if any name starts with a mutating verb
+  (`place_`, `cancel_`, `create_`, `update_` and so on). The Alpaca key is pinned to the paper
+  endpoint, at enrolment and on every use. Neither server tool can place an order.
+- **Robinhood's agent sign-in, as observed.** A non-Claude client can use it: dynamic client
+  registration, then PKCE with a localhost redirect. The access token lasts about 8.8 days, a
+  refresh token is issued, and the only scope is `internal`, so there is **no read-only scope**
+  and the allowlist above is the only guard. Store `result.content[0].text`, not the JSON-RPC
+  envelope: that reproduces a connector-ingested body's sha256 exactly. Responses carry a
+  `guide` field from Robinhood, which is kept.
+- **Every `terraform apply`, deploy and credential enrolment is the owner's to run.** An
+  agent session stops before each one. Deploy the image **before** `terraform apply` when the
+  job's command changes, or the job points at a binary the old image does not have.
+- **`fetch_snapshot` leaves a partial pull open** and names what is missing; a retry uses a
+  new id, because re-pulls differ.
 
 ## Snapshots and the order log
 
