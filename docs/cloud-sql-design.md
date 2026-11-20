@@ -119,10 +119,11 @@ waits for the owner's go-ahead.
 
 - **Steps 1 and 2: built and passing** against a local PostgreSQL 16, including the real-data tests
   in the private copy of the repository.
-- **Steps 3 to 5: prepared, nothing run.** The code and Terraform exist and are tested offline
-  (`terraform validate` passes), but no instance has been created, no data moved and no server
-  switched. What was *not* tested: the Cloud SQL connector (`internal/store/cloudsql.go`) has never
-  connected to a real instance, and `terraform plan` has not been run against the live project.
+- **Steps 3 to 5: run against a real instance.** The instance was created, the schema migrated, the
+  append-only grants proven, the data imported and verified byte-identical, the server switched, and
+  a live check-in written to it. The things that were unverified when this was written turned out as
+  follows: the connector works, and a Cloud SQL IAM user **cannot** create tables in the `public`
+  schema of a new database (step 3.4 has the one-time grant).
 - **Step 6: not started.** It deletes the Firestore database and waits until the owner chooses.
 
 What was added for 3 to 5:
@@ -166,12 +167,26 @@ file ties it to one checkout. Move it to a private Cloud Storage bucket first:
 3. `terraform apply`.
 4. Create the schema as the owner, then grant the server: `ob db migrate --cloudsql
    <connection name>/<database>/<your Google account> --server-role <server user>`. Both values come
-   from the Terraform outputs. **Unverified:** whether a Cloud SQL IAM user may create tables in the
-   `public` schema of a new database. If the migration fails with a permission error on that schema,
-   grant it once as the built-in `postgres` user, then run the migration again.
+   from the Terraform outputs. A Cloud SQL IAM user may **not** create tables in the `public` schema
+   of a new database, so the first run fails with `permission denied for schema public (SQLSTATE
+   42501)`. Grant it once as the built-in `postgres` user, then run the migration again:
+   1. Set a temporary password on `postgres` (`gcloud sql users set-password postgres
+      --instance <instance> --password-file <file>`; delete the file afterwards). This is a manual
+      change Terraform does not know about; remove the password when done if you can.
+   2. Start the proxy: `cloud-sql-proxy <connection name> --port 9471` (install it with `gcloud
+      components install cloud-sql-proxy`; it lands in the SDK's `bin` directory, which may not be
+      on `PATH`).
+   3. In another shell: `PGPASSWORD=<password> psql "host=127.0.0.1 port=9471 dbname=<database>
+      user=postgres sslmode=disable" -c 'GRANT CREATE ON SCHEMA public TO "<owner>"'`, where
+      `<owner>` is your Google account as the IAM database user name. Use the proxy with `psql`,
+      not `gcloud sql connect`: it prompts for the password on the terminal and ignores `PGPASSWORD`.
+   4. Stop the proxy, then run the `ob db migrate` command above again.
 5. Show the grants hold: `ob db check-append-only --cloudsql <connection name>/<database>/<server
-   user>`. It must report that all three statements are refused. Run it with the server's
-   service-account credentials (impersonation), since it checks the connected user.
+   user>`. It must report that all three statements are refused. It checks the connected user, so
+   it must connect as the server user: run it with the server's service-account credentials by
+   impersonation. That needs `roles/iam.serviceAccountTokenCreator` on the server's service account
+   for the person running it. Grant it for the check and remove it afterwards (a manual change
+   Terraform does not know about).
 
 **Step 4: move the data.**
 1. `ob db export --project <project> --to <empty dir>` from Firestore.
@@ -179,16 +194,35 @@ file ties it to one checkout. Move it to a private Cloud Storage bucket first:
 3. `ob db export --cloudsql <...>/<owner> --to <second empty dir>` and compare the two directories
    with `diff -r`. They must be identical. Firestore is untouched throughout.
 
+**Before step 5 (only if the image's compiled-in config is not the real one): the config bucket.**
+The image compiles in `config/accounts.json` and `books/<book>/{book,rules}.json`. In a repository
+where those are synthetic, an image built from it would run the wrong accounts and rules. Keep the
+real ones in a private bucket instead:
+1. Set `config_bucket = "<a new bucket name>"` in `terraform.tfvars` (keep the name out of the
+   repository). `terraform plan` expects a versioned, public-access-prevented bucket, a read-only
+   `storage.objectViewer` binding for the server's service account, the Storage API, and a new
+   Cloud Run revision with `CONFIG_BUCKET` set. Apply it.
+2. Upload the real files at the same paths as in the repository (`config/accounts.json` and
+   `books/<book>/{book,rules}.json`) and compare each object's sha256 with the local file.
+3. The server reads them once at startup, logs `config: bucket <name> (<object>#<generation>, ...)`,
+   and **refuses to start** if any is missing or unreadable; it never falls back to the compiled-in
+   defaults. A rule change is an upload followed by a new revision. The bucket is versioned, so every
+   earlier generation is kept.
+
 **Step 5: switch the server.**
 1. Build and deploy an image containing this code **before** changing `store_backend`, so the service
-   understands `STORE`.
+   understands `STORE`. The Dockerfile's Go version must match `go.mod`.
 2. Set `store_backend = "cloudsql"`, `terraform plan` (expect only the Cloud Run environment to
    change), then apply.
 3. Check the new revision logs `store cloudsql=...`, an unauthenticated POST to `/mcp` still gets
    401, and `verify` and `list_snapshots` through the connector read the same data as before.
 4. Do one live check-in through the server, as in the phase 4 gate.
 5. **Rollback:** set `store_backend` back to `firestore` and apply. Nothing was removed from
-   Firestore, so this restores the previous state, apart from anything written to Cloud SQL since.
+   Firestore, so this restores the previous state, **but only until the first write to Cloud SQL**.
+   After that Cloud SQL holds data Firestore does not, and going back would need an export from
+   Cloud SQL into an empty Firestore; `ob db import` refuses ids that already exist, so there is no
+   delta import. Write nothing through the server between the step 4 export and the switch, or that
+   data is not in Cloud SQL.
 
 **Step 6: retire Firestore.** Only after a period the owner chooses, and after keeping a last
 Firestore export. Remove the Firestore database and its insert-only role in Terraform. This cannot be
