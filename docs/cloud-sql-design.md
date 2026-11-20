@@ -145,8 +145,11 @@ variable in plain text (the allowed account, for one), so it must never be commi
 file ties it to one checkout. Move it to a private Cloud Storage bucket first:
 1. Create the bucket outside Terraform (it must exist before Terraform can use it), with versioning
    on, uniform bucket-level access and public access prevention enforced.
-2. Add a `backend "gcs"` block (`bucket`, `prefix`) to the `terraform` block, then run
-   `terraform init -migrate-state` from the directory that holds the existing state.
+2. `infra/gcp/main.tf` carries an empty `backend "gcs" {}` block, so the bucket name is never
+   committed. Run `terraform init -migrate-state -backend-config="bucket=<bucket>"
+   -backend-config="prefix=terraform/state"` from a directory that holds the existing state and
+   this configuration. After that, every `terraform init` takes the same two `-backend-config`
+   flags.
 3. Run `terraform plan`. It must show **no changes**. Keep the old local state file until it does,
    then store it somewhere private and out of any repository.
 

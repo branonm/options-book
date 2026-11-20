@@ -9,6 +9,10 @@
 
 terraform {
   required_version = ">= 1.6"
+  # State lives in a private, versioned Cloud Storage bucket. The bucket name is
+  # not committed; pass it at init:
+  #   terraform init -backend-config="bucket=<bucket>" -backend-config="prefix=terraform/state"
+  backend "gcs" {}
   required_providers {
     google = {
       source  = "hashicorp/google"
