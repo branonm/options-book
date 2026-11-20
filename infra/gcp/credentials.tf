@@ -47,14 +47,14 @@ resource "google_secret_manager_secret_iam_member" "mcp_reads" {
 
 resource "google_service_account" "refresher" {
   account_id   = "wheel-cred-refresher"
-  display_name = "options-book credential refresher (robinhood-oauth only)"
+  display_name = "${var.name_prefix} credential refresher (robinhood-oauth only)"
 }
 
 # Exactly what cred.Rotate does: read the latest version, add one, list,
 # disable the previous, destroy older. Granted on robinhood-oauth only.
 resource "google_project_iam_custom_role" "refresher" {
   role_id     = "wheelCredRefresher"
-  title       = "options-book credential refresher"
+  title       = "${var.name_prefix} credential refresher"
   description = "Rotate versions of one secret: access, add, list, disable, destroy. Granted on robinhood-oauth only."
   permissions = [
     "secretmanager.versions.access",
@@ -103,7 +103,7 @@ resource "google_cloud_run_v2_job" "refresh" {
 
 resource "google_service_account" "scheduler" {
   account_id   = "wheel-cred-scheduler"
-  display_name = "options-book: runs the credential refresh job"
+  display_name = "${var.name_prefix}: runs the credential refresh job"
 }
 
 resource "google_cloud_run_v2_job_iam_member" "scheduler_runs_refresh" {

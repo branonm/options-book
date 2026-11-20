@@ -76,7 +76,7 @@ resource "google_firestore_database" "main" {
 }
 
 resource "google_artifact_registry_repository" "images" {
-  repository_id = "options-book"
+  repository_id = var.name_prefix
   location      = var.region
   format        = "DOCKER"
   # Stay inside the 0.5 GB free allowance.
@@ -100,13 +100,13 @@ resource "google_artifact_registry_repository" "images" {
 
 resource "google_service_account" "mcp" {
   account_id   = "wheel-mcp"
-  display_name = "options-book MCP server"
+  display_name = "${var.name_prefix} MCP server"
 }
 
 # The append-only guarantee: create, read and list, never update or delete.
 resource "google_project_iam_custom_role" "insert_only" {
   role_id     = "wheelMcpInsertOnly"
-  title       = "options-book insert-only Firestore access"
+  title       = "${var.name_prefix} insert-only Firestore access"
   description = "Create and read Firestore documents; no update, no delete."
   permissions = [
     "datastore.databases.get",
@@ -207,7 +207,7 @@ resource "google_cloud_run_v2_service_iam_member" "public" {
 
 resource "google_billing_budget" "guard" {
   billing_account = var.billing_account
-  display_name    = "options-book guard"
+  display_name    = "${var.name_prefix} guard"
   budget_filter {
     projects = ["projects/${data.google_project.this.number}"]
   }

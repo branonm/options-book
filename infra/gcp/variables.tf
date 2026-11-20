@@ -74,3 +74,9 @@ variable "config_bucket" {
   type        = string
   default     = ""
 }
+
+variable "name_prefix" {
+  description = "Prefix for the Artifact Registry repository id and the display names and titles of the service accounts, custom roles and budget. The default suits a new project. Changing it on a project that already exists renames display names in place, but the repository id cannot change: Terraform would delete and recreate the repository, and its images with it. A project created under another name keeps that name here."
+  type        = string
+  default     = "options-book"
+}

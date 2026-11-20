@@ -5,3 +5,6 @@ oauth_client_id = "NNNN-xxxx.apps.googleusercontent.com"
 allowed_email   = "maintainer@example.com"
 # image is set on the second apply, after the first build:
 # image = "us-east1-docker.pkg.dev/my-project-xxxxxx/options-book/gcpping:v1"
+# A project first created under another name keeps that name here. The repository id cannot change
+# without deleting the repository and its images, so set this to what is already deployed:
+# name_prefix = "options-book"
