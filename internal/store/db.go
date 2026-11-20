@@ -234,3 +234,10 @@ func byts(d Doc, k string) ([]byte, error) {
 	}
 	return v, nil
 }
+
+// Every backend must satisfy DB; a drifting method signature fails the build here.
+var (
+	_ DB = (*Mem)(nil)
+	_ DB = (*Firestore)(nil)
+	_ DB = (*Postgres)(nil)
+)
