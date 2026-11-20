@@ -49,6 +49,7 @@ locals {
   apis = [
     "run.googleapis.com",
     "firestore.googleapis.com",
+    "storage.googleapis.com",
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",
     "iam.googleapis.com",
@@ -157,6 +158,13 @@ resource "google_cloud_run_v2_service" "mcp" {
         name  = "PROJECT_ID"
         value = var.project_id
       }
+      dynamic "env" {
+        for_each = var.config_bucket == "" ? [] : [var.config_bucket]
+        content {
+          name  = "CONFIG_BUCKET"
+          value = env.value
+        }
+      }
       # Which store the server reads and writes. Firestore (no STORE variable) is
       # the default; "cloudsql" is the switch in docs/cloud-sql-design.md, step 5.
       dynamic "env" {
@@ -173,7 +181,7 @@ resource "google_cloud_run_v2_service" "mcp" {
       }
     }
   }
-  depends_on = [google_project_service.apis, google_project_iam_member.mcp_insert_only]
+  depends_on = [google_project_service.apis, google_project_iam_member.mcp_insert_only, google_storage_bucket_iam_member.config_reader]
 
   # Google fills in a service-level scaling block with its defaults (min 0,
   # manual 0) after every apply, and Terraform would clear it every time, a

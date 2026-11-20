@@ -68,3 +68,9 @@ variable "cloudsql_budget_usd" {
   type        = string
   default     = "20"
 }
+
+variable "config_bucket" {
+  description = "Name of a private Cloud Storage bucket to create for the real accounts.json and books/<book>/{book,rules}.json, which the server reads at startup (CONFIG_BUCKET). Empty (the default) keeps the compiled-in defaults, which in the public repo are synthetic. Keep the name out of the repo, as with the state bucket."
+  type        = string
+  default     = ""
+}
