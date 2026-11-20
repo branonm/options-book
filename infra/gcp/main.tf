@@ -9,6 +9,10 @@
 
 terraform {
   required_version = ">= 1.6"
+  # State lives in a private, versioned Cloud Storage bucket. The bucket name is
+  # not committed; pass it at init:
+  #   terraform init -backend-config="bucket=<bucket>" -backend-config="prefix=terraform/state"
+  backend "gcs" {}
   required_providers {
     google = {
       source  = "hashicorp/google"
@@ -45,6 +49,7 @@ locals {
   apis = [
     "run.googleapis.com",
     "firestore.googleapis.com",
+    "storage.googleapis.com",
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",
     "iam.googleapis.com",
@@ -153,15 +158,40 @@ resource "google_cloud_run_v2_service" "mcp" {
         name  = "PROJECT_ID"
         value = var.project_id
       }
+      dynamic "env" {
+        for_each = var.config_bucket == "" ? [] : [var.config_bucket]
+        content {
+          name  = "CONFIG_BUCKET"
+          value = env.value
+        }
+      }
+      # Which store the server reads and writes. Firestore (no STORE variable) is
+      # the default; "cloudsql" is the switch in docs/cloud-sql-design.md, step 5.
+      dynamic "env" {
+        for_each = var.store_backend == "cloudsql" ? {
+          STORE             = "cloudsql"
+          CLOUDSQL_INSTANCE = google_sql_database_instance.main[0].connection_name
+          CLOUDSQL_DATABASE = var.cloudsql_database
+          CLOUDSQL_USER     = local.server_db_user
+        } : {}
+        content {
+          name  = env.key
+          value = env.value
+        }
+      }
     }
   }
-  depends_on = [google_project_service.apis, google_project_iam_member.mcp_insert_only]
+  depends_on = [google_project_service.apis, google_project_iam_member.mcp_insert_only, google_storage_bucket_iam_member.config_reader]
 
   # Google fills in a service-level scaling block with its defaults (min 0,
   # manual 0) after every apply, and Terraform would clear it every time, a
   # permanent diff that hides real ones. Our scaling is template.scaling above.
   lifecycle {
     ignore_changes = [scaling]
+    precondition {
+      condition     = var.store_backend != "cloudsql" || var.enable_cloudsql
+      error_message = "store_backend = \"cloudsql\" needs enable_cloudsql = true."
+    }
   }
 }
 
@@ -184,7 +214,7 @@ resource "google_billing_budget" "guard" {
   amount {
     specified_amount {
       currency_code = "USD"
-      units         = "1"
+      units         = var.enable_cloudsql ? var.cloudsql_budget_usd : "1"
     }
   }
   threshold_rules { threshold_percent = 0.5 }

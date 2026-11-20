@@ -1,6 +1,6 @@
 # Build from the repo root:  gcloud builds submit --config cmd/ob-mcp/cloudbuild.yaml ...
 # The upload is limited by .gcloudignore to code only; no trading data.
-FROM golang:1.25 AS build
+FROM golang:1.26 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

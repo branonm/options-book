@@ -6,7 +6,7 @@
 // writes or refreshes a credential). It has no order path, and every store
 // write is a create.
 //
-// accounts.json and every book (books/<book>/{book,rules}.json) are compiled in
+// accounts.json and every book (books/<book>/{book,rules}.json) are compiled in (synthetic defaults in the public repo; the real ones come from CONFIG_BUCKET)
 // (config/embed.go, books/embed.go), so a rule
 // change is a commit and a deploy, and every run records their sha256.
 //
@@ -17,6 +17,12 @@
 //	PUBLIC_URL               https://<service>.run.app, no trailing slash (required)
 //	PROJECT_ID               GCP project holding the Firestore database (required)
 //	FIRESTORE_DB             database id (default "(default)")
+//	STORE                    "firestore" (default), "cloudsql" or "postgres" (local testing only)
+//	CLOUDSQL_INSTANCE        STORE=cloudsql: the connection name, PROJECT:REGION:INSTANCE
+//	CLOUDSQL_DATABASE        STORE=cloudsql: the database name
+//	CLOUDSQL_USER            STORE=cloudsql: the IAM database user (the service account email without .gserviceaccount.com)
+//	POSTGRES_DSN             STORE=postgres: a DSN for a local database (local testing only)
+//	CONFIG_BUCKET            optional: a bucket holding accounts.json and books/<book>/{book,rules}.json, read at startup instead of the compiled-in defaults (fails closed)
 //	CACHE_TTL                how long an opened, verified store is reused (default 5m)
 //	FIRESTORE_EMULATOR_HOST  use the local emulator instead (local testing only)
 //	LOCAL_TESTING            "true" allows an http PUBLIC_URL (local testing only)
@@ -35,14 +41,12 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/branonm/options-book/books"
-	configfiles "github.com/branonm/options-book/config"
 	"github.com/branonm/options-book/internal/config"
 	"github.com/branonm/options-book/internal/cred"
 	"github.com/branonm/options-book/internal/gauth"
+	"github.com/branonm/options-book/internal/obmcp"
 	"github.com/branonm/options-book/internal/rules"
 	"github.com/branonm/options-book/internal/store"
-	"github.com/branonm/options-book/internal/obmcp"
 )
 
 // commit is set at build time: -ldflags "-X main.commit=<sha>".
@@ -82,7 +86,9 @@ func run() error {
 		ttl = d
 	}
 
-	deps, err := newDeps(project, database, get("FIRESTORE_EMULATOR_HOST"), ttl)
+	deps, err := newDepsStore(project, database, get("FIRESTORE_EMULATOR_HOST"), storeConfig{
+		Kind: get("STORE"), Instance: get("CLOUDSQL_INSTANCE"), Database: get("CLOUDSQL_DATABASE"), User: get("CLOUDSQL_USER"), DSN: get("POSTGRES_DSN"), ConfigBucket: get("CONFIG_BUCKET"),
+	}, ttl)
 	if err != nil {
 		return err
 	}
@@ -105,53 +111,94 @@ func newHandler(auth gauth.Config, v gauth.Verifier, deps *obmcp.Deps) http.Hand
 	return gauth.Handler(auth, v, mcpHandler)
 }
 
+// storeConfig picks the store behind the server. The zero value is Firestore,
+// which is what is deployed today; Cloud SQL is chosen by STORE=cloudsql.
+type storeConfig struct {
+	Kind     string // "", "firestore", "cloudsql" or "postgres"
+	Instance string // cloudsql: PROJECT:REGION:INSTANCE
+	Database string // cloudsql: database name
+	User     string // cloudsql: IAM database user
+	DSN      string // postgres: local testing only
+
+	// ConfigBucket, when set, is a Cloud Storage bucket holding accounts.json and
+	// books/<book>/{book,rules}.json, read at startup in place of the compiled-in
+	// (synthetic) defaults. Unreadable means the server does not start.
+	ConfigBucket string
+}
+
 func newDeps(project, database, emulator string, ttl time.Duration) (*obmcp.Deps, error) {
-	accounts, err := config.ParseAccounts(layout.AccountsConfig+" (compiled in)", configfiles.Accounts)
+	return newDepsStore(project, database, emulator, storeConfig{}, ttl)
+}
+
+func newDepsStore(project, database, emulator string, sc storeConfig, ttl time.Duration) (*obmcp.Deps, error) {
+	cs, err := embeddedConfig()
+	if sc.ConfigBucket != "" {
+		var objs objectStore
+		if objs, err = newGCSObjects(context.Background(), sc.ConfigBucket); err == nil {
+			cs, err = bucketConfig(context.Background(), objs, sc.ConfigBucket)
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("config: %s", cs.Origin)
+	accounts, err := config.ParseAccounts(layout.AccountsConfig+" ("+cs.Origin+")", cs.Accounts)
 	if err != nil {
 		return nil, err
 	}
 	bks := map[string]*obmcp.BookConfig{}
-	for _, name := range books.Names() {
-		bb, err := books.Book(name)
+	for name, bf := range cs.Books {
+		bb, rb := bf.Book, bf.Rules
+		cfg, err := config.ParseBook(name, layout.BookFile(name)+" ("+cs.Origin+")", bb, accounts)
 		if err != nil {
 			return nil, err
 		}
-		rb, err := books.Rules(name)
-		if err != nil {
-			return nil, err
-		}
-		cfg, err := config.ParseBook(name, layout.BookFile(name)+" (compiled in)", bb, accounts)
-		if err != nil {
-			return nil, err
-		}
-		r, err := rules.Parse(layout.RulesFile(name)+" (compiled in)", rb)
+		r, err := rules.Parse(layout.RulesFile(name)+" ("+cs.Origin+")", rb)
 		if err != nil {
 			return nil, err
 		}
 		bks[name] = &obmcp.BookConfig{Name: name, Cfg: cfg, Rules: r, BookSHA: store.SHA256(bb), RulesSHA: store.SHA256(rb)}
 	}
 	if bks[layout.DefaultBook] == nil {
-		return nil, fmt.Errorf("the default book %q is not compiled in (have %v)", layout.DefaultBook, books.Names())
+		return nil, fmt.Errorf("the default book %q is not in the configuration (%s)", layout.DefaultBook, cs.Origin)
 	}
 	var db store.DB
 	spec := "firestore=" + project
-	if emulator != "" {
+	switch {
+	case emulator != "":
 		db, spec = store.NewEmulator(emulator, project), "emulator="+emulator
-	} else {
+	case sc.Kind == "cloudsql":
+		pg, err := store.NewCloudSQL(context.Background(), sc.Instance, sc.Database, sc.User)
+		if err != nil {
+			return nil, err
+		}
+		db, spec = pg, "cloudsql="+sc.Instance+"/"+sc.Database
+	case sc.Kind == "postgres":
+		if sc.DSN == "" {
+			return nil, fmt.Errorf("STORE=postgres needs POSTGRES_DSN")
+		}
+		pg, err := store.NewPostgres(context.Background(), sc.DSN, "")
+		if err != nil {
+			return nil, err
+		}
+		db, spec = pg, "postgres"
+	case sc.Kind == "" || sc.Kind == "firestore":
 		fdb, err := store.NewFirestore(context.Background(), project, database)
 		if err != nil {
 			return nil, err
 		}
 		db = fdb
+	default:
+		return nil, fmt.Errorf("STORE=%q: want firestore, cloudsql or postgres", sc.Kind)
 	}
 	d := &obmcp.Deps{
-		Books: bks, DefaultBook: layout.DefaultBook, Accounts: accounts, AccountsSHA: store.SHA256(configfiles.Accounts),
+		Books: bks, DefaultBook: layout.DefaultBook, Accounts: accounts, AccountsSHA: store.SHA256(cs.Accounts),
 		DB: db, Spec: spec, Commit: buildCommit(), CacheTTL: ttl,
 	}
 	// Phase 5: on the live store, the credentials are read from Secret Manager
 	// (the server's service account can read the latest versions, never write).
 	// The emulator has no credentials, so fetch_snapshot and cred_status aren't offered.
-	if emulator == "" {
+	if emulator == "" && sc.Kind != "postgres" {
 		v, err := cred.NewSecretManager(context.Background(), project)
 		if err != nil {
 			return nil, err

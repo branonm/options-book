@@ -30,6 +30,16 @@ Needs Go 1.25 or later. The tests read only the **synthetic** repo in `testdata/
 fictional accounts, a few symbols (AAA, BBB, CCC), two sealed snapshots and a generic `rules.json`.
 Nothing in this repository comes from a real account.
 
+To run the store tests against a PostgreSQL backend too, point `POSTGRES_DSN` at a database the
+test may create schemas in (PostgreSQL 16 locally is enough; each run uses a scratch schema of its
+own and removes stale ones). Without it those tests are skipped:
+
+```sh
+POSTGRES_DSN="postgres://user@127.0.0.1:5432/dbname?sslmode=disable" go test ./...
+```
+
+See `docs/cloud-sql-design.md` for what this backend is for and what is still to do.
+
 ## Try it on the synthetic data
 
 The commands read `config/`, `books/`, `snapshots/`, `history/` relative to the working directory.
@@ -63,7 +73,7 @@ regenerates the whole tree.
 | `ob history plan` / `add` | the append-only order log, pulled incrementally |
 | `ob expirations` | record how contracts that ran through expiration finished |
 | `ob reconcile` | the ledger against the broker's own realized option P&L |
-| `ob db` | import, export and verify a store (a Firestore database or its emulator) |
+| `ob db` | import, export, verify, migrate and check a store (Firestore or its emulator, or PostgreSQL / Cloud SQL) |
 | `ob cred` | manage the broker credentials the server uses |
 
 ## Accounts, books and rules
@@ -88,7 +98,7 @@ internal/snapshot        loads and checks a snapshots/<date>/ folder
 internal/history         the append-only order log
 internal/diff, reconcile, render, report, format
 internal/broker          canonical types and one adapter per source (robinhood, alpaca)
-internal/store           the store and its Firestore backend
+internal/store           the store: Firestore and PostgreSQL backends, and the in-memory one for tests
 internal/layout          where everything lives in the repo layout
 testdata/synthetic       the fictional repo the tests read
 tools/synthfixture       regenerates it

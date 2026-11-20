@@ -116,6 +116,15 @@ func writeSession(t *testing.T, fsys fs.FS) (*mcp.ClientSession, store.DB, *time
 		// A fresh emulator project per session: the real Firestore API's create semantics.
 		db = store.NewEmulator(host, fmt.Sprintf("wt-%d", time.Now().UnixNano()))
 	}
+	if dsn := os.Getenv("POSTGRES_DSN"); dsn != "" {
+		// A scratch schema per session: the real create semantics, append-only trigger included.
+		p, cleanup, err := store.ScratchPostgres(ctx, dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(cleanup)
+		db = p
+	}
 	if _, err := store.ImportRepo(ctx, db, fsys); err != nil {
 		t.Fatal(err)
 	}
