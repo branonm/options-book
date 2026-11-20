@@ -154,8 +154,12 @@ file ties it to one checkout. Move it to a private Cloud Storage bucket first:
    then store it somewhere private and out of any repository.
 
 **Step 3: infrastructure.**
-1. Set `enable_cloudsql = true` and `cloudsql_budget_usd` (after checking Google's current pricing) in
-   `terraform.tfvars`. Leave `store_backend` as `firestore`.
+1. Set `enable_cloudsql = true` in `terraform.tfvars`. Leave `store_backend` as `firestore`.
+   The budget alert defaults to $20 a month. From Google's catalog prices on 2026-11-20 (zonal
+   `db-f1-micro` $0.0105 an hour, 10 GiB standard storage at $0.17 per GiB-month, backups at $0.08
+   per GiB-month), the instance costs about $10 a month, or up to about $17.50 if the public IPv4
+   address is billed at $0.01 an hour; the first bill settles which. Re-check before changing the
+   tier or the disk.
 2. `terraform plan`. Expect: the Cloud SQL API, the instance, the database, two IAM database users,
    four IAM bindings and a changed budget, and **no change to the Cloud Run service**. Stop if the
    plan shows anything else.

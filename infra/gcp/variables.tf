@@ -64,7 +64,7 @@ variable "cloudsql_database" {
 }
 
 variable "cloudsql_budget_usd" {
-  description = "Monthly budget amount (whole USD) once Cloud SQL is enabled, replacing the $1 guard. Set it after checking Google's current pricing."
+  description = "Monthly budget amount (whole USD) once Cloud SQL is enabled, replacing the $1 guard. An alert threshold, not a cap. 20 covers the default instance (list prices of 2026-11-20: about $10 a month, up to about $17.50 if the public IPv4 address is billed at $0.01 an hour); re-check before changing the tier or disk."
   type        = string
-  default     = "15"
+  default     = "20"
 }
