@@ -38,7 +38,18 @@ own and removes stale ones). Without it those tests are skipped:
 POSTGRES_DSN="postgres://user@127.0.0.1:5432/dbname?sslmode=disable" go test ./...
 ```
 
-See `docs/cloud-sql-design.md` for what this backend is for and what is still to do.
+## Storage
+
+The MCP server keeps its data in **Cloud SQL for PostgreSQL** (`STORE=cloudsql`). The store is
+create-only: the server's database user is granted `SELECT` and `INSERT` and nothing else, a
+trigger refuses `UPDATE` and `DELETE` for every user, and `store.Open` and `ob db verify` refuse any
+broken hash, chain or seal. The instance has no password and no authorised networks; the server
+reaches it through the Cloud SQL Go connector with IAM database authentication. `infra/gcp` holds
+the Terraform, and `docs/cloud-sql-design.md` the design and the migration runbook.
+
+The Firestore backend (`internal/store/firestore.go`) is legacy. It is still in the code, and
+`ob-mcp` still falls back to it when `STORE` is unset, so set `STORE=cloudsql` explicitly. It is
+kept only to migrate existing data out and will be removed.
 
 ## Try it on the synthetic data
 
@@ -73,7 +84,7 @@ regenerates the whole tree.
 | `ob history plan` / `add` | the append-only order log, pulled incrementally |
 | `ob expirations` | record how contracts that ran through expiration finished |
 | `ob reconcile` | the ledger against the broker's own realized option P&L |
-| `ob db` | import, export, verify, migrate and check a store (Firestore or its emulator, or PostgreSQL / Cloud SQL) |
+| `ob db` | import, export, verify, migrate and check a store (Cloud SQL or a local PostgreSQL; legacy Firestore for migrating out) |
 | `ob cred` | manage the broker credentials the server uses |
 
 ## Accounts, books and rules
@@ -98,7 +109,7 @@ internal/snapshot        loads and checks a snapshots/<date>/ folder
 internal/history         the append-only order log
 internal/diff, reconcile, render, report, format
 internal/broker          canonical types and one adapter per source (robinhood, alpaca)
-internal/store           the store: Firestore and PostgreSQL backends, and the in-memory one for tests
+internal/store           the store: PostgreSQL / Cloud SQL backend, the in-memory one for tests, legacy Firestore
 internal/layout          where everything lives in the repo layout
 testdata/synthetic       the fictional repo the tests read
 tools/synthfixture       regenerates it
