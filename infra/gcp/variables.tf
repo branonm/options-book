@@ -80,3 +80,9 @@ variable "name_prefix" {
   type        = string
   default     = "options-book"
 }
+
+variable "enable_firestore" {
+  description = "Create the Firestore database, its insert-only role and binding. True (the default) keeps what an existing project has. Set false for a project that runs on Cloud SQL from the start (store_backend = \"cloudsql\"): the server does not use Firestore then, and a project with it off cannot switch back to it without setting this true again."
+  type        = bool
+  default     = true
+}

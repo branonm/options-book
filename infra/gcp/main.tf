@@ -46,15 +46,14 @@ resource "google_project_iam_member" "cloudbuild_default_sa" {
 }
 
 locals {
-  apis = [
+  apis = concat(var.enable_firestore ? ["firestore.googleapis.com"] : [], [
     "run.googleapis.com",
-    "firestore.googleapis.com",
     "storage.googleapis.com",
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",
     "iam.googleapis.com",
     "billingbudgets.googleapis.com",
-  ]
+  ])
   # Cloud Run's deterministic URL, so the server can be told its own address
   # in the same apply that creates it.
   public_url = "https://${var.service_name}-${data.google_project.this.number}.${var.region}.run.app"
@@ -67,6 +66,7 @@ resource "google_project_service" "apis" {
 }
 
 resource "google_firestore_database" "main" {
+  count                   = var.enable_firestore ? 1 : 0
   name                    = "(default)"
   location_id             = var.region
   type                    = "FIRESTORE_NATIVE"
@@ -99,12 +99,15 @@ resource "google_artifact_registry_repository" "images" {
 }
 
 resource "google_service_account" "mcp" {
+  depends_on   = [google_project_service.apis]
   account_id   = "wheel-mcp"
   display_name = "${var.name_prefix} MCP server"
 }
 
 # The append-only guarantee: create, read and list, never update or delete.
 resource "google_project_iam_custom_role" "insert_only" {
+  depends_on  = [google_project_service.apis]
+  count       = var.enable_firestore ? 1 : 0
   role_id     = "wheelMcpInsertOnly"
   title       = "${var.name_prefix} insert-only Firestore access"
   description = "Create and read Firestore documents; no update, no delete."
@@ -117,8 +120,9 @@ resource "google_project_iam_custom_role" "insert_only" {
 }
 
 resource "google_project_iam_member" "mcp_insert_only" {
+  count   = var.enable_firestore ? 1 : 0
   project = var.project_id
-  role    = google_project_iam_custom_role.insert_only.id
+  role    = google_project_iam_custom_role.insert_only[0].id
   member  = "serviceAccount:${google_service_account.mcp.email}"
 }
 
@@ -192,6 +196,10 @@ resource "google_cloud_run_v2_service" "mcp" {
       condition     = var.store_backend != "cloudsql" || var.enable_cloudsql
       error_message = "store_backend = \"cloudsql\" needs enable_cloudsql = true."
     }
+    precondition {
+      condition     = var.store_backend != "firestore" || var.enable_firestore
+      error_message = "store_backend = \"firestore\" needs enable_firestore = true."
+    }
   }
 }
 
@@ -233,4 +241,20 @@ output "service_account" {
 
 output "image_repository" {
   value = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.images.repository_id}"
+}
+
+# These three gained a count (enable_firestore); keep existing state attached.
+moved {
+  from = google_firestore_database.main
+  to   = google_firestore_database.main[0]
+}
+
+moved {
+  from = google_project_iam_custom_role.insert_only
+  to   = google_project_iam_custom_role.insert_only[0]
+}
+
+moved {
+  from = google_project_iam_member.mcp_insert_only
+  to   = google_project_iam_member.mcp_insert_only[0]
 }
