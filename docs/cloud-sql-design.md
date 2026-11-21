@@ -1,8 +1,12 @@
 # Store on Cloud SQL (PostgreSQL)
 
-**Status: decided 2026-11-19 by the owner; not started.** Stay on GCP and replace Firestore
-with Cloud SQL for PostgreSQL. No third-party database. Steps 1–2 may start at any time;
-steps 3–6 each wait for the owner's go-ahead.
+**Status: Cloud SQL is the store (the owner, 2026-11-20).** Decided 2026-11-19: stay on GCP
+and replace Firestore with Cloud SQL for PostgreSQL, no third-party database. Steps 1–2 are
+built (`internal/store/postgres.go`, `cloudsql.go`); the owner has set up the instance and
+dropped Firestore. **Step 6 is still open:** the Firestore backend, the server's fallback to it
+when `STORE` is unset, and the Firestore resources in `infra/gcp` are still in the code. The
+rest of this document is the design as decided; read it as history where it says "today" of
+Firestore.
 
 ## Why
 
