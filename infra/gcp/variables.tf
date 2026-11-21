@@ -15,7 +15,7 @@ variable "region" {
 
 variable "service_name" {
   type    = string
-  default = "wheel-mcp"
+  default = "options-book-mcp"
 }
 
 variable "image" {

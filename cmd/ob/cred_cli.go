@@ -2,7 +2,7 @@ package main
 
 // `ob cred`: enroll, refresh and inspect credentials (PLAN.md, "Phase 5
 // design"). Enroll and status run on the owner's machine with his own Google
-// sign-in; refresh runs in the wheel-cred-refresher job. Nothing here ever
+// sign-in; refresh runs in the options-book-cred-refresher job. Nothing here ever
 // prints a token or key: only version numbers and expiry.
 
 import (

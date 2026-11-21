@@ -5,12 +5,12 @@
 #                machine, so no credential is ever in Terraform state.
 #   ob-mcp    reads the latest version of both, and nothing else in
 #                Secret Manager. The server never refreshes.
-#   refresher    wheel-cred-refresher: reads, adds, lists, disables and
+#   refresher    options-book-cred-refresher: reads, adds, lists, disables and
 #                destroys versions of robinhood-oauth only. No Firestore, no
 #                other secret. Only it (and the owner) write robinhood-oauth.
-#   job          wheel-cred-refresh: the server image running
+#   job          options-book-cred-refresh: the server image running
 #                `ob cred refresh robinhood`, as the refresher.
-#   trigger      Cloud Scheduler runs the job daily, as wheel-cred-scheduler,
+#   trigger      Cloud Scheduler runs the job daily, as options-book-cred-scheduler,
 #                which can run that one job and do nothing else.
 #
 # Cloud Scheduler's free allowance: 3 jobs a month (confirmed by the owner from
@@ -47,7 +47,7 @@ resource "google_secret_manager_secret_iam_member" "mcp_reads" {
 
 resource "google_service_account" "refresher" {
   depends_on   = [google_project_service.apis]
-  account_id   = "wheel-cred-refresher"
+  account_id   = "options-book-cred-refresher"
   display_name = "${var.name_prefix} credential refresher (robinhood-oauth only)"
 }
 
@@ -55,7 +55,7 @@ resource "google_service_account" "refresher" {
 # disable the previous, destroy older. Granted on robinhood-oauth only.
 resource "google_project_iam_custom_role" "refresher" {
   depends_on  = [google_project_service.apis]
-  role_id     = "wheelCredRefresher"
+  role_id     = "optionsBookCredRefresher"
   title       = "${var.name_prefix} credential refresher"
   description = "Rotate versions of one secret: access, add, list, disable, destroy. Granted on robinhood-oauth only."
   permissions = [
@@ -75,7 +75,7 @@ resource "google_secret_manager_secret_iam_member" "refresher_rotates" {
 }
 
 resource "google_cloud_run_v2_job" "refresh" {
-  name                = "wheel-cred-refresh"
+  name                = "options-book-cred-refresh"
   location            = var.region
   deletion_protection = false
   template {
@@ -105,7 +105,7 @@ resource "google_cloud_run_v2_job" "refresh" {
 
 resource "google_service_account" "scheduler" {
   depends_on   = [google_project_service.apis]
-  account_id   = "wheel-cred-scheduler"
+  account_id   = "options-book-cred-scheduler"
   display_name = "${var.name_prefix}: runs the credential refresh job"
 }
 
@@ -119,7 +119,7 @@ resource "google_cloud_run_v2_job_iam_member" "scheduler_runs_refresh" {
 # Daily. The job refreshes only when under two days are left (cred.RefreshWindow),
 # so most runs change nothing; an ~8.8-day token is refreshed about every 7 days.
 resource "google_cloud_scheduler_job" "refresh_daily" {
-  name      = "wheel-cred-refresh-daily"
+  name      = "options-book-cred-refresh-daily"
   region    = var.region
   schedule  = "0 13 * * *"
   time_zone = "Etc/UTC"

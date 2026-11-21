@@ -1,7 +1,7 @@
 // Package cred is the credential layer (PLAN.md, "Phase 5 design"): one
 // Provider per credential, each stored as versions of one Secret Manager
 // secret. Enroll runs once, by the owner, with his own Google sign-in; Refresh
-// runs only in the wheel-cred-refresher job; the server only reads the latest
+// runs only in the options-book-cred-refresher job; the server only reads the latest
 // version and authorizes requests with it. A token is never printed: callers
 // report a version number and an expiry.
 package cred

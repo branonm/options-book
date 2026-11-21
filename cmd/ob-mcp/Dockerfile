@@ -11,7 +11,7 @@ COPY cmd/ob-mcp ./cmd/ob-mcp
 COPY cmd/ob ./cmd/ob
 ARG COMMIT=unknown
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.commit=${COMMIT}" -o /ob-mcp ./cmd/ob-mcp
-# /ob too: the wheel-cred-refresh job runs `ob cred refresh robinhood` from this image.
+# /ob too: the options-book-cred-refresh job runs `ob cred refresh robinhood` from this image.
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /ob ./cmd/ob
 
 FROM gcr.io/distroless/static-debian12:nonroot

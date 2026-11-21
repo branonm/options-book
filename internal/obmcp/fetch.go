@@ -4,7 +4,7 @@ package obmcp
 // snapshot pulled by the server straight from Robinhood's MCP server, through
 // internal/rhmcp's read-only allowlist, and stored verbatim — no response is
 // retyped. The server only reads the Robinhood credential; the
-// wheel-cred-refresher job alone refreshes it.
+// options-book-cred-refresher job alone refreshes it.
 
 import (
 	"bytes"

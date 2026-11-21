@@ -243,13 +243,13 @@ create-only `run` document, and later phases are meant to hold the agent's recom
 risk checks and staged proposals the same way, so a later session can read them back.
 
 - **Append-only is enforced outside the code.** The server's service account has a custom
-  IAM role (`wheelMcpInsertOnly`, `infra/gcp/main.tf`) with `datastore.entities.get`, `list`
+  IAM role (`optionsBookInsertOnly`, `infra/gcp/main.tf`) with `datastore.entities.get`, `list`
   and `create` and **no `update` or `delete`**. Every write is therefore a create with a
   "must not exist" precondition, and sealing a snapshot is itself a create, so it happens
   once and cannot be undone. A bug in the code cannot rewrite history, because the platform
   refuses it.
 - **Credentials have one writer.** The server reads the latest version of each secret and
-  nothing else in Secret Manager. Only a separate job (`wheel-cred-refresher`, role in
+  nothing else in Secret Manager. Only a separate job (`options-book-cred-refresher`, role in
   `infra/gcp/credentials.tf`, no Firestore access) writes the Robinhood token, so the server
   never refreshes and there are no races. Each refresh adds a version, disables the previous
   one and destroys older ones, keeping at most two. A token is never printed, only its

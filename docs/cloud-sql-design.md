@@ -64,7 +64,7 @@ One `jsonb` limit needs a guard: it can't hold a null character (`\u0000`) in a 
 
 ## Append-only, enforced outside the server's code
 
-Today a custom IAM role (`wheelMcpInsertOnly`, `infra/gcp/main.tf`) grants
+Today a custom IAM role (`optionsBookInsertOnly`, `infra/gcp/main.tf`) grants
 `datastore.entities.get`, `list` and `create`, with no update or delete. On Cloud SQL the
 equivalent is three layers:
 

@@ -1,7 +1,7 @@
 # Phase 1 spike infrastructure (the storage design).
 #
 # Creates: the APIs, a Firestore database, an Artifact Registry repository,
-# the wheel-mcp service account with an insert-only custom role, the Cloud
+# the options-book-mcp service account with an insert-only custom role, the Cloud
 # Run service, and a $1 billing budget.
 #
 # Not created here (done by hand, see spike/gcpping/README.md): the project
@@ -100,7 +100,7 @@ resource "google_artifact_registry_repository" "images" {
 
 resource "google_service_account" "mcp" {
   depends_on   = [google_project_service.apis]
-  account_id   = "wheel-mcp"
+  account_id   = "options-book-mcp"
   display_name = "${var.name_prefix} MCP server"
 }
 
@@ -108,7 +108,7 @@ resource "google_service_account" "mcp" {
 resource "google_project_iam_custom_role" "insert_only" {
   depends_on  = [google_project_service.apis]
   count       = var.enable_firestore ? 1 : 0
-  role_id     = "wheelMcpInsertOnly"
+  role_id     = "optionsBookInsertOnly"
   title       = "${var.name_prefix} insert-only Firestore access"
   description = "Create and read Firestore documents; no update, no delete."
   permissions = [
