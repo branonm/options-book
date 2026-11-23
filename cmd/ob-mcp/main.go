@@ -4,7 +4,9 @@
 // 5, fetch_snapshot, which pulls from Robinhood through internal/rhmcp's
 // read-only allowlist using the token it reads from Secret Manager (it never
 // writes or refreshes a credential). It has no order path, and every store
-// write is a create.
+// write is a create. The one exception is the notes bucket (NOTES_BUCKET), where a
+// write replaces a note only against the generation the caller read, and the bucket
+// keeps every generation.
 //
 // accounts.json and every book (books/<book>/{book,rules}.json) are compiled in (synthetic defaults in the public repo; the real ones come from CONFIG_BUCKET)
 // (config/embed.go, books/embed.go), so a rule
@@ -23,6 +25,7 @@
 //	CLOUDSQL_USER            STORE=cloudsql: the IAM database user (the service account email without .gserviceaccount.com)
 //	POSTGRES_DSN             STORE=postgres: a DSN for a local database (local testing only)
 //	CONFIG_BUCKET            optional: a bucket holding accounts.json and books/<book>/{book,rules}.json, read at startup instead of the compiled-in defaults (fails closed)
+//	NOTES_BUCKET             optional: a private, versioned bucket for the owner's working notes (notes/<name>.md), served by notes_list, notes_read and notes_write; an unusable one is logged and the tools report it, the server still starts
 //	CACHE_TTL                how long an opened, verified store is reused (default 5m)
 //	FIRESTORE_EMULATOR_HOST  use the local emulator instead (local testing only)
 //	LOCAL_TESTING            "true" allows an http PUBLIC_URL (local testing only)
@@ -87,7 +90,7 @@ func run() error {
 	}
 
 	deps, err := newDepsStore(project, database, get("FIRESTORE_EMULATOR_HOST"), storeConfig{
-		Kind: get("STORE"), Instance: get("CLOUDSQL_INSTANCE"), Database: get("CLOUDSQL_DATABASE"), User: get("CLOUDSQL_USER"), DSN: get("POSTGRES_DSN"), ConfigBucket: get("CONFIG_BUCKET"),
+		Kind: get("STORE"), Instance: get("CLOUDSQL_INSTANCE"), Database: get("CLOUDSQL_DATABASE"), User: get("CLOUDSQL_USER"), DSN: get("POSTGRES_DSN"), ConfigBucket: get("CONFIG_BUCKET"), NotesBucket: get("NOTES_BUCKET"),
 	}, ttl)
 	if err != nil {
 		return err
@@ -124,6 +127,11 @@ type storeConfig struct {
 	// books/<book>/{book,rules}.json, read at startup in place of the compiled-in
 	// (synthetic) defaults. Unreadable means the server does not start.
 	ConfigBucket string
+
+	// NotesBucket, when set, is the private bucket holding the owner's working
+	// notes (internal/notes). Unlike ConfigBucket, an unusable one is logged and the
+	// notes tools report it; the server still starts.
+	NotesBucket string
 }
 
 func newDeps(project, database, emulator string, ttl time.Duration) (*obmcp.Deps, error) {
@@ -208,6 +216,9 @@ func newDepsStore(project, database, emulator string, sc storeConfig, ttl time.D
 		d.AlpacaPaper = cred.NewAlpacaPaper(nil)
 		d.RobinhoodMCP = cred.RobinhoodMCP
 		d.RobinhoodHTTP = &http.Client{Timeout: 60 * time.Second}
+	}
+	if sc.NotesBucket != "" {
+		d.Notes = openNotes(context.Background(), sc.NotesBucket)
 	}
 	return d, nil
 }
