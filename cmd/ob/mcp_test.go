@@ -15,10 +15,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/branonm/options-book/internal/config"
+	"github.com/branonm/options-book/internal/obmcp"
 	"github.com/branonm/options-book/internal/report"
 	"github.com/branonm/options-book/internal/rules"
 	"github.com/branonm/options-book/internal/store"
-	"github.com/branonm/options-book/internal/obmcp"
 )
 
 // The store spec the CLI and the server both use in these tests.

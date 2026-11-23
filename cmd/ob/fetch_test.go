@@ -17,9 +17,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/branonm/options-book/internal/cred"
+	"github.com/branonm/options-book/internal/obmcp"
 	"github.com/branonm/options-book/internal/rhmcp"
 	"github.com/branonm/options-book/internal/store"
-	"github.com/branonm/options-book/internal/obmcp"
 )
 
 // fakeRH answers Robinhood's MCP calls with the bodies a real snapshot
@@ -92,7 +92,7 @@ func (f *fakeRH) body(tool string, args map[string]any) (string, bool) {
 		if args["chain_symbol"] != "BBB" {
 			f.t.Errorf("get_option_chains %v", args)
 		}
-		return `{"data":{"chains":[{"id":"b0000000-0000-4000-8000-000000000021","symbol":"BBB"}]}}`, false
+		return `{"data":{"chains":[{"id":"b0000000-0000-4000-8000-000000000021","symbol":"BBB","expiration_dates":["2026-02-20","2026-03-20","2027-03-19"]}]}}`, false
 	case "get_option_instruments":
 		if args["chain_symbol"] != "BBB" || args["type"] != "call" || fmt.Sprint(args["expiration_dates"]) != "[2026-03-20]" {
 			f.t.Errorf("get_option_instruments %v", args)
@@ -425,5 +425,35 @@ func TestTicketByContract(t *testing.T) {
 	args["contract"] = "BBB $85c 2026-03-20"
 	if o := callTool(t, cs, "ticket", args); !o.isError || !strings.Contains(o.text, "not an OCC symbol") {
 		t.Errorf("bad contract: %+v", o)
+	}
+}
+
+// recommend: the server keeps the chain's expirations inside the DTE window
+// (2/20 is 7 days out and 3/19/27 is 399, so only 3/20 survives), pulls the
+// calls there and their quotes, stores each response, and runs every contract
+// through the ticket checks.
+func TestRecommendTool(t *testing.T) {
+	ctx := context.Background()
+	cs, db, _ := fetchSession(t, repoAt(t, "2026-02-13", nil), "2026-02-13")
+	out := callTool(t, cs, "recommend", map[string]any{"symbol": "bbb", "account": "roth", "snapshot": "2026-02-13"})
+	if out.isError {
+		t.Fatalf("recommend: %s", out.text)
+	}
+	for _, want := range []string{"BBB calls 14–240 DTE", "fetched by this server", "snapshot 2026-02-13", "# roth BBB", "Considered 1 contracts"} {
+		if !strings.Contains(out.text, want) {
+			t.Errorf("output lacks %q:\n%s", want, out.text)
+		}
+	}
+	d, err := db.Get(ctx, store.CRun, out.runID)
+	if err != nil || d["tool"] != "recommend" || strings.Count(fmt.Sprint(d["inputs"]), ",") != 2 {
+		t.Errorf("run: %v %v", d, err)
+	}
+	// A window that ends before it starts is refused before anything is fetched.
+	if o := callTool(t, cs, "recommend", map[string]any{"symbol": "bbb", "min_dte": 100, "max_dte": 50, "snapshot": "2026-02-13"}); !o.isError || !strings.Contains(o.text, "under min_dte") {
+		t.Errorf("window: %v %s", o.isError, o.text)
+	}
+	// No shares, no recommendation.
+	if o := callTool(t, cs, "recommend", map[string]any{"symbol": "ZZZ", "snapshot": "2026-02-13"}); !o.isError || !strings.Contains(o.text, "holds ZZZ") {
+		t.Errorf("ZZZ: %v %s", o.isError, o.text)
 	}
 }

@@ -76,6 +76,13 @@ regenerates the whole tree.
 | `ob db` | import, export, verify, migrate and check a store (Firestore or its emulator, or PostgreSQL / Cloud SQL) |
 | `ob cred` | manage the broker credentials the server uses |
 
+The server also offers **`recommend`** (no CLI twin: it pulls a live chain). Given a symbol, it pulls
+the call chain in a DTE window (default 14–240 days) and the quotes from Robinhood, stores each
+response verbatim, and runs every contract through the same checks as `ticket`. It lists each
+contract that passes for every account with free lots, marks the best strike per expiry, and picks
+the best on the emptiest ladder rung. Its limit is the midpoint rounded down to the tick, never below
+the bid. A below-band delta is kept only at an expiry where nothing in band passes.
+
 ## Accounts, books and rules
 
 `config/accounts.json` lists every account (its label, the last four characters of its number,

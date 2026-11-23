@@ -20,9 +20,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/branonm/options-book/internal/history"
+	"github.com/branonm/options-book/internal/obmcp"
 	"github.com/branonm/options-book/internal/snapshot"
 	"github.com/branonm/options-book/internal/store"
-	"github.com/branonm/options-book/internal/obmcp"
 )
 
 // replayed are the check-ins the gate redoes through the server, in order.

@@ -51,7 +51,7 @@ cmd/ob, cmd/agent-tools                 wiring, flags, output, exit codes
 | `internal/ledger` | Orders → `Leg`s, realized P&L, blended fills, `Block` premium and Rule 11 breakevens. Plus `expirations.go`: how a contract that ran through expiry ended |
 | `internal/snapshot` | Loads a `snapshots/<id>/` folder; `Check` lists what's missing with the exact call to fix it; `WriteManifest` seals it; `ParseID` is the one parser of snapshot ids; `ReplayRef` rebuilds orders from the log |
 | `internal/history` | The append-only order-version log, incremental pulls, exact prefix replay |
-| `internal/report` | The output of `ledger`, `checkin`, `ticket`, `book`, `diff`, `reconcile`, `db list`, `db show`: functions over a `snapshot.At` writing to an `io.Writer`. The CLI and `ob-mcp` both call them, which is what makes a tool byte-identical to the CLI |
+| `internal/report` | The output of `ledger`, `checkin`, `ticket`, `recommend`, `book`, `diff`, `reconcile`, `db list`, `db show`: functions over a `snapshot.At` writing to an `io.Writer`. The CLI and `ob-mcp` both call them, which is what makes a tool byte-identical to the CLI (`recommend` has no CLI twin: it pulls a live chain, so only `ob-mcp` calls it) |
 | `internal/cred` | Phase 5 credential layer: `Provider` (`robinhood`, `alpaca-paper`), `Vault` over Secret Manager versions, `Rotate` (refresh under 48h left; keep at most two versions). Never prints a secret. The paper pin must equal `internal/alpaca`'s (tested there) |
 | `internal/rhmcp` | `ob-mcp`'s Robinhood MCP client. Only the 12 tools on `Allowlist`; a mutating name fails `TestAllowlistIsReadOnly` and panics at init. Returns `content[0].text` verbatim; follows `next` or refuses |
 | `internal/obmcp` | `ob-mcp`'s tools. Each figure-producing tool calls `report`, returns its text unchanged, and records a `run` (exit code and run id go in structured content only) |
@@ -380,5 +380,5 @@ canonical one (`Order.BrokerState`), and a check that compares states for *chang
 `broker.OrderSync` too: `history` asks the registered sync for a record's head, which
 states are final, how a page reads and what the next pull must contain, so the log, the
 plan text and every order-page parser (`history`, `store`, `wheelmcp`) are broker-neutral.
-The Robinhood-specific pull paths (`rhmcp`, `fetch_snapshot`, `ticket` by contract) are
+The Robinhood-specific pull paths (`rhmcp`, `fetch_snapshot`, `ticket` by contract, `recommend`) are
 Robinhood's by nature, and become a `Fetcher` capability when a second source needs one.

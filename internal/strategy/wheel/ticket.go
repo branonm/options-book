@@ -93,10 +93,35 @@ type Ticket struct {
 	Rejections []string `json:"rejections"`
 	Warnings   []string `json:"warnings"`
 	Accepted   bool     `json:"accepted"`
+
+	// kinds[i] classifies Rejections[i] ("" = unclassified); Recommend tallies by it.
+	kinds []string
 }
 
-func (t *Ticket) reject(f string, a ...any) {
+// Rejection kinds: stable labels for the reasons Recommend tallies, so a
+// reworded message can't change them.
+const (
+	KindNotTradable  = "contract not tradable"
+	KindExpired      = "expired"
+	KindOpenInterest = "open interest below the minimum"
+	KindBreakeven    = "strike below the breakeven (Rule 11)"
+	KindClearance    = "clearance below the graded minimum (Rule 11)"
+	KindDeltaAbove   = "delta above the band"
+	KindQuote        = "quote outside the trading window or stale"
+)
+
+func (t *Ticket) reject(f string, a ...any) { t.rejectAs("", f, a...) }
+func (t *Ticket) rejectAs(kind, f string, a ...any) {
 	t.Rejections = append(t.Rejections, fmt.Sprintf(f, a...))
+	t.kinds = append(t.kinds, kind)
+}
+
+// RejectionKind is the kind of the i-th rejection, or "" if unclassified.
+func (t *Ticket) RejectionKind(i int) string {
+	if i < 0 || i >= len(t.kinds) {
+		return ""
+	}
+	return t.kinds[i]
 }
 func (t *Ticket) warn(f string, a ...any)   { t.Warnings = append(t.Warnings, fmt.Sprintf(f, a...)) }
 func dp(d decimal.Decimal) *decimal.Decimal { return &d }
@@ -172,10 +197,10 @@ func (bk *Book) Ticket(r *rules.Rules, p Proposal) (*Ticket, error) {
 
 	// Contract state and market data.
 	if in.State != "active" || in.Tradability != "tradable" {
-		t.reject("contract is %s/%s, not active/tradable", in.State, in.Tradability)
+		t.rejectAs(KindNotTradable, "contract is %s/%s, not active/tradable", in.State, in.Tradability)
 	}
 	if t.DTE <= 0 {
-		t.reject("contract expires %s, on or before the as-of date", in.Expiry)
+		t.rejectAs(KindExpired, "contract expires %s, on or before the as-of date", in.Expiry)
 	}
 	if p.FetchedAt.IsZero() {
 		checkQuoteTime(t, r, bk.AsOf)
@@ -184,7 +209,7 @@ func (bk *Book) Ticket(r *rules.Rules, p Proposal) (*Ticket, error) {
 		checkFetchTime(t, r, bk.AsOf, p.FetchedAt)
 	}
 	if t.OI < r.MinOpenInterest.Value {
-		t.reject("open interest %d is below %d (%s)", t.OI, r.MinOpenInterest.Value, r.MinOpenInterest.Rule)
+		t.rejectAs(KindOpenInterest, "open interest %d is below %d (%s)", t.OI, r.MinOpenInterest.Value, r.MinOpenInterest.Rule)
 	}
 	if !p.Limit.IsPositive() {
 		t.reject("limit must be > 0")
@@ -254,7 +279,7 @@ func ticketCall(t *Ticket, r *rules.Rules, a *Account, p Proposal, strike, mult 
 	t.Clearance = dp(clr)
 	t.ClearancePct = dp(clr.DivRound(beAfter, ledger.DivPlaces))
 	if strike.LessThan(beAfter) {
-		t.reject("strike $%s is below the premium-adjusted breakeven $%s (Rule 11)", strike, beAfter.StringFixed(2))
+		t.rejectAs(KindBreakeven, "strike $%s is below the premium-adjusted breakeven $%s (Rule 11)", strike, beAfter.StringFixed(2))
 	}
 
 	// Graded clearance needs a spot price.
@@ -268,7 +293,7 @@ func ticketCall(t *Ticket, r *rules.Rules, a *Account, p Proposal, strike, mult 
 		g := r.GradedClearance
 		switch {
 		case t.ClearancePct.LessThan(req):
-			t.reject("clearance %s%% is below the %s%% graded-clearance minimum at %s%% underwater (Rule 11)",
+			t.rejectAs(KindClearance, "clearance %s%% is below the %s%% graded-clearance minimum at %s%% underwater (Rule 11)",
 				pct(*t.ClearancePct), pct(req), pct(depth))
 		case depth.LessThanOrEqual(g.NearBasisDepth) && t.ClearancePct.LessThan(g.NearBasisTarget):
 			t.warn("clearance %s%% meets the %s%% minimum but is under the %s%% target near basis (Rule 11)",
@@ -280,7 +305,7 @@ func ticketCall(t *Ticket, r *rules.Rules, a *Account, p Proposal, strike, mult 
 	b := r.DeltaBands.CoveredCall
 	switch {
 	case t.Delta.GreaterThan(b.Max):
-		t.reject("delta %s is above the %s–%s band (%s)", t.Delta.StringFixed(3), b.Min, b.Max, b.Rule)
+		t.rejectAs(KindDeltaAbove, "delta %s is above the %s–%s band (%s)", t.Delta.StringFixed(3), b.Min, b.Max, b.Rule)
 	case t.Delta.LessThan(b.Min):
 		t.warn("delta %s is below the %s–%s band; acceptable only if the Rule 11 floor forces this strike (Rule 9)", t.Delta.StringFixed(3), b.Min, b.Max)
 	}
@@ -363,7 +388,7 @@ func ticketPut(t *Ticket, r *rules.Rules, a *Account, pool *Pool, bk *Book, p Pr
 func checkQuoteTime(t *Ticket, r *rules.Rules, asOf time.Time) {
 	qt, err := time.Parse(time.RFC3339Nano, t.QuoteTime)
 	if err != nil {
-		t.reject("quote has no readable updated_at (%q)", t.QuoteTime)
+		t.rejectAs(KindQuote, "quote has no readable updated_at (%q)", t.QuoteTime)
 		return
 	}
 	loc, _ := time.LoadLocation(r.QuoteWindow.Timezone)
@@ -377,14 +402,14 @@ func checkQuoteTime(t *Ticket, r *rules.Rules, asOf time.Time) {
 	stamp := lt.Format("Mon 2006-01-02 15:04 MST")
 	switch {
 	case lt.Weekday() == time.Saturday || lt.Weekday() == time.Sunday:
-		t.reject("quote is from a weekend (%s): not a price (%s)", stamp, r.QuoteWindow.Rule)
+		t.rejectAs(KindQuote, "quote is from a weekend (%s): not a price (%s)", stamp, r.QuoteWindow.Rule)
 	case lt.Before(open):
-		t.reject("quote is from before %s or the opening bell (%s): not a price (%s)", r.QuoteWindow.Open, stamp, r.QuoteWindow.Rule)
+		t.rejectAs(KindQuote, "quote is from before %s or the opening bell (%s): not a price (%s)", r.QuoteWindow.Open, stamp, r.QuoteWindow.Rule)
 	case !lt.Before(closeT):
-		t.reject("quote is from after the %s close (%s): not a price (%s)", r.QuoteWindow.Close, stamp, r.QuoteWindow.Rule)
+		t.rejectAs(KindQuote, "quote is from after the %s close (%s): not a price (%s)", r.QuoteWindow.Close, stamp, r.QuoteWindow.Rule)
 	}
 	if lt.Format("2006-01-02") != asOf.Format("2006-01-02") {
-		t.reject("quote is from %s, not the as-of session %s: re-quote", lt.Format("2006-01-02"), asOf.Format("2006-01-02"))
+		t.rejectAs(KindQuote, "quote is from %s, not the as-of session %s: re-quote", lt.Format("2006-01-02"), asOf.Format("2006-01-02"))
 	}
 }
 
@@ -486,19 +511,19 @@ func checkFetchTime(t *Ticket, r *rules.Rules, asOf, fetched time.Time) {
 	stamp := lt.Format("Mon 2006-01-02 15:04 MST")
 	switch {
 	case lt.Weekday() == time.Saturday || lt.Weekday() == time.Sunday:
-		t.reject("quote was fetched on a weekend (%s): not a price (%s)", stamp, r.QuoteWindow.Rule)
+		t.rejectAs(KindQuote, "quote was fetched on a weekend (%s): not a price (%s)", stamp, r.QuoteWindow.Rule)
 	case lt.Before(open):
-		t.reject("quote was fetched before %s plus the first %d minutes (%s): not a price (%s)", r.QuoteWindow.Open, r.QuoteWindow.ExcludeOpeningMinutes, stamp, r.QuoteWindow.Rule)
+		t.rejectAs(KindQuote, "quote was fetched before %s plus the first %d minutes (%s): not a price (%s)", r.QuoteWindow.Open, r.QuoteWindow.ExcludeOpeningMinutes, stamp, r.QuoteWindow.Rule)
 	case !lt.Before(closeT):
-		t.reject("quote was fetched after the %s close (%s): not a price (%s)", r.QuoteWindow.Close, stamp, r.QuoteWindow.Rule)
+		t.rejectAs(KindQuote, "quote was fetched after the %s close (%s): not a price (%s)", r.QuoteWindow.Close, stamp, r.QuoteWindow.Rule)
 	}
 	if lt.Format("2006-01-02") != asOf.Format("2006-01-02") {
-		t.reject("quote was fetched in the %s session, not the as-of session %s", lt.Format("2006-01-02"), asOf.Format("2006-01-02"))
+		t.rejectAs(KindQuote, "quote was fetched in the %s session, not the as-of session %s", lt.Format("2006-01-02"), asOf.Format("2006-01-02"))
 	}
 	if qt, err := time.Parse(time.RFC3339Nano, t.QuoteTime); err != nil {
-		t.reject("quote has no readable updated_at (%q)", t.QuoteTime)
+		t.rejectAs(KindQuote, "quote has no readable updated_at (%q)", t.QuoteTime)
 	} else if q := qt.In(loc).Format("2006-01-02"); q != lt.Format("2006-01-02") {
-		t.reject("Robinhood's quote is from the %s session, not the %s session it was fetched in: stale", q, lt.Format("2006-01-02"))
+		t.rejectAs(KindQuote, "Robinhood's quote is from the %s session, not the %s session it was fetched in: stale", q, lt.Format("2006-01-02"))
 	}
 }
 

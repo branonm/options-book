@@ -19,11 +19,11 @@ import (
 	"github.com/branonm/options-book/internal/alpacapull"
 	"github.com/branonm/options-book/internal/config"
 	"github.com/branonm/options-book/internal/cred"
+	"github.com/branonm/options-book/internal/obmcp"
 	"github.com/branonm/options-book/internal/report"
 	"github.com/branonm/options-book/internal/rules"
 	"github.com/branonm/options-book/internal/snapshot"
 	"github.com/branonm/options-book/internal/store"
-	"github.com/branonm/options-book/internal/obmcp"
 )
 
 // paperRoot and alpacaSamps live beside the code, not in the data root the

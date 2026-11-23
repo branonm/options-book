@@ -45,6 +45,7 @@ func registerFetch(server *mcp.Server, s *tools) {
 	mcp.AddTool(server, &mcp.Tool{Name: "rh_read", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: boolp(true)},
 		Description: "Read-only pass-through to Robinhood's MCP server for ad-hoc lookups: one call to a get_ tool on the compiled allowlist, or get_earnings_calendar, get_earnings_results, get_equity_fundamentals or get_index_quotes. The response is stored verbatim (no snapshot) and returned exactly as Robinhood sent it; its sha256 is in the result."},
 		expose(s.rhRead))
+	registerRecommend(server, s)
 }
 
 func (s *tools) credStatus(ctx context.Context, _ *mcp.CallToolRequest, _ NoIn) (*mcp.CallToolResult, Result, error) {
