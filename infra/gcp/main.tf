@@ -170,6 +170,13 @@ resource "google_cloud_run_v2_service" "mcp" {
           value = env.value
         }
       }
+      dynamic "env" {
+        for_each = var.notes_bucket == "" ? [] : [var.notes_bucket]
+        content {
+          name  = "NOTES_BUCKET"
+          value = env.value
+        }
+      }
       # Which store the server reads and writes. Firestore (no STORE variable) is
       # the default; "cloudsql" is the switch in docs/cloud-sql-design.md, step 5.
       dynamic "env" {
@@ -186,7 +193,7 @@ resource "google_cloud_run_v2_service" "mcp" {
       }
     }
   }
-  depends_on = [google_project_service.apis, google_project_iam_member.mcp_insert_only, google_storage_bucket_iam_member.config_reader]
+  depends_on = [google_project_service.apis, google_project_iam_member.mcp_insert_only, google_storage_bucket_iam_member.config_reader, google_storage_bucket_iam_member.notes_writer]
 
   # Google fills in a service-level scaling block with its defaults (min 0,
   # manual 0) after every apply, and Terraform would clear it every time, a

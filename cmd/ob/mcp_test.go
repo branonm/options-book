@@ -96,10 +96,11 @@ func testBooks(t *testing.T) (map[string]*obmcp.BookConfig, *config.Accounts, st
 }
 
 type toolOut struct {
-	text     string
-	exitCode int
-	runID    string
-	isError  bool
+	text       string
+	exitCode   int
+	runID      string
+	generation string
+	isError    bool
 }
 
 func callTool(t *testing.T, cs *mcp.ClientSession, name string, args map[string]any) toolOut {
@@ -138,7 +139,7 @@ func callTool(t *testing.T, cs *mcp.ClientSession, name string, args map[string]
 	if seen == "" {
 		t.Errorf("%s %v: empty report", name, args)
 	}
-	out.text, out.exitCode, out.runID = seen, r.ExitCode, r.RunID
+	out.text, out.exitCode, out.runID, out.generation = seen, r.ExitCode, r.RunID, r.Generation
 	return out
 }
 

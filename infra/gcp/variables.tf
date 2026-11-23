@@ -86,3 +86,9 @@ variable "enable_firestore" {
   type        = bool
   default     = true
 }
+
+variable "notes_bucket" {
+  description = "Name of a private, versioned Cloud Storage bucket to create for the owner's working notes (PLAN.md, BUGS.md, design docs), which the server reads and writes through its notes tools (NOTES_BUCKET). Empty (the default) creates no bucket and the server offers no notes tools. Keep the name out of the repo, as with the state bucket. Every generation is kept; nothing is deleted."
+  type        = string
+  default     = ""
+}

@@ -83,6 +83,14 @@ contract that passes for every account with free lots, marks the best strike per
 the best on the emptiest ladder rung. Its limit is the midpoint rounded down to the tick, never below
 the bid. A below-band delta is kept only at an expiry where nothing in band passes.
 
+The server also keeps the owner's **working notes** (the plan, the bug log, design docs) in a private,
+versioned bucket (`NOTES_BUCKET`), outside git. `notes_list` shows them (with `versions`, every
+generation), `notes_read` returns one note exactly as stored together with its generation, and
+`notes_write` changes one against the generation just read: replace all, append, or replace the one
+place `old` occurs. A write is refused if the note has moved since, and nothing is ever deleted, so
+every earlier generation can be read back. The tools exist only when the server has a notes bucket;
+`infra/gcp/notes_bucket.tf` creates one.
+
 ## Accounts, books and rules
 
 `config/accounts.json` lists every account (its label, the last four characters of its number,

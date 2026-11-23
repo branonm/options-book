@@ -28,6 +28,7 @@ import (
 	"github.com/branonm/options-book/internal/broker"
 	"github.com/branonm/options-book/internal/config"
 	"github.com/branonm/options-book/internal/cred"
+	"github.com/branonm/options-book/internal/notes"
 	"github.com/branonm/options-book/internal/report"
 	"github.com/branonm/options-book/internal/rules"
 	"github.com/branonm/options-book/internal/snapshot"
@@ -67,6 +68,9 @@ type Deps struct {
 	RobinhoodMCP  string
 	RobinhoodHTTP *http.Client
 	AlpacaHTTP    *http.Client // nil: a default client
+
+	// Notes is the owner's working notes. With it nil, the notes tools aren't offered.
+	Notes notes.Store
 }
 
 // bk resolves a tool's book parameter: the named book, or the default when empty.
@@ -93,7 +97,8 @@ const Instructions = `options-book: the owner's options wheel book, computed by 
 	`Snapshots are named by id, e.g. 2026-11-16 or 2026-11-13T1151; list_snapshots lists them. ` +
 	`A check-in through the server: history_plan per account; open_snapshot; ingest every Robinhood response unedited ` +
 	`(say verbatim=false with a note if you retyped one); history_add per account; seal_snapshot; then checkin, diff, book. ` +
-	`Everything stored is permanent: nothing can be changed or removed, and a sealed snapshot takes no new inputs.`
+	`Everything stored is permanent: nothing can be changed or removed, and a sealed snapshot takes no new inputs. ` +
+	`The owner's working notes (PLAN.md, BUGS.md, design docs) are read with notes_read and changed with notes_write against the generation just read; earlier generations are kept and nothing is deleted.`
 
 // Register adds every read tool to server.
 func Register(server *mcp.Server, d *Deps) {
@@ -136,6 +141,9 @@ func Register(server *mcp.Server, d *Deps) {
 	registerWrites(server, s)
 	if d.Vault != nil {
 		registerFetch(server, s)
+	}
+	if d.Notes != nil {
+		registerNotes(server, s)
 	}
 }
 
@@ -181,6 +189,8 @@ type Result struct {
 	SHA256   string `json:"sha256,omitempty"` // a stored Robinhood response (rh_read)
 	Output   string `json:"output"`
 	Error    string `json:"error,omitempty"`
+	// Generation is a note's generation number (notes_read, notes_write), as a string.
+	Generation string `json:"generation,omitempty"`
 }
 
 // expose makes a handler's report and its refusals visible to any client,
