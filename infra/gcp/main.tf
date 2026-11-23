@@ -12,6 +12,7 @@ terraform {
   # State lives in a private, versioned Cloud Storage bucket. The bucket name is
   # not committed; pass it at init:
   #   terraform init -backend-config="bucket=<bucket>" -backend-config="prefix=terraform/state"
+  # terraform.tfvars lives in the same bucket: see tfvars.sh (pull before plan, push after a change).
   backend "gcs" {}
   required_providers {
     google = {
