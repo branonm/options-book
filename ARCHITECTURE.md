@@ -1,8 +1,50 @@
-| `internal/notes` | The owner's working notes (`PLAN.md`, `BUGS.md`, design docs) in a private, versioned bucket (`NOTES_BUCKET`), standard library only. A `Store` (`List`, `Read`, `Write`) with an in-memory twin for tests and a Cloud Storage JSON API client. **Every write is guarded by the generation the caller read** (`ifGenerationMatch`; 0 creates), so a stale edit is a `*ConflictError` instead of an overwrite, and the versioned bucket keeps every earlier generation. `Change` applies one of three edits (replace all, append, or replace the one place `old` occurs) to the note as read and writes it back against the same generation. **There is no delete path** at any layer, and no note is larger than 1 MiB. `obmcp`'s `notes_list`, `notes_read` and `notes_write` are the only way a Claude session reaches it, and they exist only when `NOTES_BUCKET` is set; an unusable bucket is logged and reported by the tools, never fatal to the server |
 # Architecture — `options-book`
 
 How the code is put together and how to extend it without breaking the parts that matter.
 Read `CLAUDE.md` first for the hard rules and the status; `README.md` for the command reference.
+
+## The system at a glance
+
+How the pieces are deployed, as of 2026-11-23. Solid lines are running; dashed lines and
+nodes are planned or not yet live.
+
+```mermaid
+flowchart TB
+  claude["Claude<br/>chat, desktop, coding sessions"]
+  rh["Robinhood MCP"]
+
+  subgraph gcp["Google Cloud project"]
+    mcp["<b>ob-mcp</b> on Cloud Run (Go)<br/>check-ins, tickets, recommend, notes<br/>read + insert-only, no order tools"]
+    sm["Secret Manager<br/>Robinhood token, Alpaca paper key"]
+    refresh["Credential refresh job<br/>daily; the token's only writer"]
+    sql[("Cloud SQL, PostgreSQL 16<br/>append-only: grants + trigger")]
+    cfg["Config bucket<br/>accounts, books, rules"]
+    notes["Notes bucket<br/>working notes, every version kept"]
+    tfstate["Terraform state bucket"]
+  end
+
+  repo["This repo<br/>code and tests; builds the image"]
+  alpaca["Alpaca paper<br/>second source"]:::planned
+  rag["Retrieval + evals<br/>pgvector, Go eval harness"]:::planned
+
+  claude -->|"custom connector, Google sign-in"| mcp
+  claude -->|"owner-approved orders, agentic account only"| rh
+  mcp -->|"read-only allowlist"| rh
+  sm -->|"token"| mcp
+  refresh -->|"rotates"| sm
+  mcp --> sql
+  mcp --> cfg
+  mcp --> notes
+  repo -->|"Cloud Build image"| mcp
+  alpaca -.-> mcp
+  sql -.-> rag
+
+  classDef planned stroke-dasharray: 5 5
+```
+
+The server never places an order: Claude places orders only through the broker's own
+connector, and only after the owner says yes. See "Storage and credentials" below for why
+each piece is built the way it is.
 
 ## Two binaries, one module
 
@@ -58,6 +100,7 @@ cmd/ob, cmd/agent-tools                 wiring, flags, output, exit codes
 | `internal/obmcp` | `ob-mcp`'s tools. Each figure-producing tool calls `report`, returns its text unchanged, and records a `run` (exit code and run id go in structured content only) |
 | `internal/gauth` | Google sign-in for `ob-mcp`: protected-resource metadata, the token + allowed-account check, source logged never gated (B6). Copied from the phase 1 spike |
 | `internal/store` | Phase 2: the storage design's Firestore collections behind a create-only `DB` (`Mem`, `Firestore` REST). `ImportRepo` from today's files; `Open` reads the store back as the repo layout (an `fs.FS` Source) and refuses it on any hash, chain or seal mismatch; `Export` / `ImportExport` / `Verify`. `storetest.Sources` gives tests every source |
+| `internal/notes` | The owner's working notes (`PLAN.md`, `BUGS.md`, design docs) in a private, versioned bucket (`NOTES_BUCKET`), standard library only. A `Store` (`List`, `Read`, `Write`) with an in-memory twin for tests and a Cloud Storage JSON API client. **Every write is guarded by the generation the caller read** (`ifGenerationMatch`; 0 creates), so a stale edit is a `*ConflictError` instead of an overwrite, and the versioned bucket keeps every earlier generation. `Change` applies one of three edits (replace all, append, or replace the one place `old` occurs) to the note as read and writes it back against the same generation. **There is no delete path** at any layer, and no note is larger than 1 MiB. `obmcp`'s `notes_list`, `notes_read` and `notes_write` are the only way a Claude session reaches it, and they exist only when `NOTES_BUCKET` is set; an unusable bucket is logged and reported by the tools, never fatal to the server |
 | `internal/strategy/wheel` | The domain model — `Book → Pool → Account → Block → ShortCall/ShortPut → Closer` — and `Check` on each. Also `Ticket` (proposals) |
 | `internal/render` | Markdown wheel-book tables, golden-tested, spliced between `BEGIN/END GENERATED` markers |
 | `internal/diff` | What changed between two snapshots |
