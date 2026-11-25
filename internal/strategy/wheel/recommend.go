@@ -52,8 +52,9 @@ type Recommendation struct {
 	Basis      decimal.Decimal  `json:"basis"`
 	Breakeven  decimal.Decimal  `json:"breakeven"`
 	Candidates []Candidate      `json:"candidates"` // by expiry, then strike
-	// Pick is the suggested write: the best candidate on the emptiest rung,
-	// the nearer expiration on a tie. nil when nothing passed.
+	// Pick is the suggested write: the best candidate, in band before under it,
+	// then on the emptiest rung, then the nearer expiration. nil when nothing
+	// passed.
 	Pick *Candidate `json:"pick,omitempty"`
 	// Considered and Rejected count the contracts tried; Reasons tallies the
 	// first rejection reason of each, with its numbers stripped.
@@ -201,7 +202,7 @@ func dropForcedLow(rec *Recommendation) {
 }
 
 // rankCandidates sorts by expiry then strike, marks the best per expiry and
-// picks the best on the emptiest rung.
+// picks the best by betterPick.
 func rankCandidates(rec *Recommendation) {
 	cs := rec.Candidates
 	sort.SliceStable(cs, func(i, j int) bool {
@@ -231,7 +232,7 @@ func rankCandidates(rec *Recommendation) {
 		if !c.Best {
 			continue
 		}
-		if pick == nil || c.Rung < pick.Rung || (c.Rung == pick.Rung && c.Expiry < pick.Expiry) {
+		if pick == nil || betterPick(c, pick) {
 			pick = c
 		}
 	}
@@ -253,4 +254,19 @@ func reasonKind(t *Ticket) string {
 		return strings.TrimSpace(s[:i])
 	}
 	return s
+}
+
+// betterPick reports whether a should be suggested over b, both the best
+// contract at their expiry. A strike in band comes before one under it (Rule 9
+// allows the latter only when the Rule 11 floor forces it, and a floor that
+// forces it at one expiry says nothing about another); then the emptier rung
+// (Rule 1); then the nearer expiration.
+func betterPick(a, b *Candidate) bool {
+	if a.InBand != b.InBand {
+		return a.InBand
+	}
+	if a.Rung != b.Rung {
+		return a.Rung < b.Rung
+	}
+	return a.Expiry < b.Expiry
 }

@@ -138,3 +138,44 @@ func TestRecommendNoLots(t *testing.T) {
 		t.Error("unknown account: want an error")
 	}
 }
+
+// B11: the nearest expiry's only strike is under the band (the Rule 11 floor
+// forces it there), while a later expiry on an equally empty rung has a strike
+// in band. The pick is the in-band one, not the nearer, weaker one. When
+// nothing is in band the nearer expiry still wins.
+func TestRecommendPicksInBandOverNearerUnderBand(t *testing.T) {
+	r := loadRules(t)
+	bk := ticketBook("AAA", 300, "60", "900", "54", "100000", "5000")
+	os := []*snapshot.Option{
+		// 12/18: only a Δ .15 strike passes, so it stays, under the band.
+		option("AAA", "call", "60.0000", "2026-12-18", "0.40", "0.44", "0.15", 1000, sessionQuote),
+		// 1/15: in band, on an equally empty rung.
+		option("AAA", "call", "59.0000", "2027-01-15", "1.10", "1.20", "0.30", 800, sessionQuote),
+	}
+	for i, o := range os {
+		id := string(rune('a' + i))
+		o.Instrument.ID, o.Quote.InstrumentID = id, id
+	}
+	recs, err := bk.Recommend(r, RecommendRequest{Symbol: "AAA", Options: os})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rc := recs[0]
+	if len(rc.Candidates) != 2 || rc.Candidates[0].InBand || !rc.Candidates[1].InBand {
+		t.Fatalf("candidates = %+v, want 12/18 under the band and 1/15 in band", rc.Candidates)
+	}
+	if rc.Pick == nil || rc.Pick.Expiry != "2027-01-15" || !rc.Pick.Strike.Equal(d("59")) {
+		t.Fatalf("pick = %+v, want 2027-01-15 $59 (in band)", rc.Pick)
+	}
+
+	// Nothing in band anywhere: the nearer expiry on the emptiest rung wins.
+	os[1] = option("AAA", "call", "59.0000", "2027-01-15", "1.10", "1.20", "0.15", 800, sessionQuote)
+	os[1].Instrument.ID, os[1].Quote.InstrumentID = "b", "b"
+	recs, err = bk.Recommend(r, RecommendRequest{Symbol: "AAA", Options: os})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := recs[0].Pick; p == nil || p.Expiry != "2026-12-18" {
+		t.Fatalf("pick = %+v, want 2026-12-18 when nothing is in band", p)
+	}
+}

@@ -28,6 +28,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -84,6 +85,10 @@ type Log struct {
 	Entries []Entry
 	lines   [][]byte // raw lines, for prefix hashing
 	sync    broker.OrderSync
+	// observed is the latest observed_at of any snapshot position recorded for
+	// this account (a history add that appended nothing leaves no line, only
+	// that position). See LastObserved.
+	observed string
 }
 
 // head reads an order record's head with the log's broker.
@@ -99,7 +104,16 @@ func Load(path string) (*Log, error) {
 		return nil, err
 	}
 	defer f.Close()
-	return parse(path, f, "")
+	l, err := parse(path, f, "")
+	if err != nil {
+		return nil, err
+	}
+	// <root>/history/<account>/orders.jsonl: the snapshots sit under <root>.
+	dir := filepath.Dir(path)
+	if filepath.Base(filepath.Dir(dir)) == "history" {
+		l.observed = latestPosition(os.DirFS(filepath.Dir(filepath.Dir(dir))), filepath.Base(dir))
+	}
+	return l, nil
 }
 
 // LoadFS is Load over a read-only Source view (fs.FS); name is a slash path
@@ -118,7 +132,35 @@ func LoadFSFor(fsys fs.FS, name, source string) (*Log, error) {
 		return nil, err
 	}
 	defer f.Close()
-	return parse(name, f, source)
+	l, err := parse(name, f, source)
+	if err != nil {
+		return nil, err
+	}
+	// history/<account>/orders.jsonl: the snapshots sit beside history/.
+	if dir := path.Dir(name); path.Base(path.Dir(dir)) == "history" {
+		l.observed = latestPosition(fsys, path.Base(dir))
+	}
+	return l, nil
+}
+
+// latestPosition is the latest observed_at among the account's snapshot
+// positions (snapshots/*/<account>/history.json), "" when there is none. A
+// position that can't be read is skipped: that only leaves the window as wide
+// as the log alone would have made it.
+func latestPosition(fsys fs.FS, account string) string {
+	names, _ := fs.Glob(fsys, "snapshots/*/"+account+"/history.json")
+	last := ""
+	for _, n := range names {
+		b, err := fs.ReadFile(fsys, n)
+		if err != nil {
+			continue
+		}
+		var ref Ref
+		if json.Unmarshal(b, &ref) == nil && ref.ObservedAt > last {
+			last = ref.ObservedAt
+		}
+	}
+	return last
 }
 
 // Lines returns the raw bytes of each line (without the newline), exactly as
@@ -220,9 +262,12 @@ func (l *Log) OpenIDs() []string {
 	return ids
 }
 
-// LastObserved is the latest observed_at in the log ("" when empty).
+// LastObserved is the latest time the log was observed complete ("" when it
+// never was): the latest observed_at of a line or of a snapshot's position in
+// the log. A pull that found nothing new appends no line but is still an
+// observation (B12), so a quiet account's window moves forward with it.
 func (l *Log) LastObserved() string {
-	last := ""
+	last := l.observed
 	for _, e := range l.Entries {
 		if e.ObservedAt > last {
 			last = e.ObservedAt
