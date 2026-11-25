@@ -101,7 +101,8 @@ func TestNotesRefusals(t *testing.T) {
 		want string
 	}{
 		{"notes_write", map[string]any{"name": "A.md", "if_generation": 0, "content": "again"}, "already exists"},
-		{"notes_write", map[string]any{"name": "A.md", "if_generation": 5, "append": "y"}, "no such note"},
+		{"notes_write", map[string]any{"name": "A.md", "if_generation": 5, "append": "y"}, "is at generation"}, // B10: a generation the note never had is a conflict, not "no such note"
+		{"notes_write", map[string]any{"name": "NOPE.md", "if_generation": 5, "append": "y"}, "no such note"},
 		{"notes_write", map[string]any{"name": "../A.md", "if_generation": 0, "content": "x"}, "note name"},
 		{"notes_write", map[string]any{"name": "A.md", "if_generation": mustInt(t, g)}, "exactly one"},
 		{"notes_write", map[string]any{"name": "A.md", "if_generation": mustInt(t, g), "old": "zzz", "new": "q"}, "not found"},

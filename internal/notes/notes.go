@@ -162,6 +162,14 @@ func Change(ctx context.Context, st Store, name string, ifGeneration int64, edit
 		}
 	} else {
 		cur, err := st.Read(ctx, name, ifGeneration)
+		if errors.Is(err, ErrNotFound) {
+			// The generation never existed. Say so only if the note doesn't
+			// either; otherwise it is a stale or wrong generation (B10).
+			if now, rerr := st.Read(ctx, name, 0); rerr == nil {
+				return nil, &ConflictError{Name: name, If: ifGeneration, Current: now.Generation}
+			}
+			return nil, err
+		}
 		if err != nil {
 			return nil, err
 		}

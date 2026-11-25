@@ -164,3 +164,26 @@ func TestVersionsKept(t *testing.T) {
 		t.Error("write against a stale generation succeeded")
 	}
 }
+
+// B10: a generation the note never had is a conflict naming the current
+// generation, not "no such note"; and nothing is written. "No such note" is
+// kept for a note that doesn't exist at all.
+func TestNeverHadGenerationIsAConflict(t *testing.T) {
+	ctx := context.Background()
+	st := NewMemory()
+	n, _ := Change(ctx, st, "A.md", 0, Edit{Content: sp("one\n")})
+	_, err := Change(ctx, st, "A.md", 1, Edit{Append: sp("x\n")})
+	var ce *ConflictError
+	if !errors.As(err, &ce) || ce.Current != n.Generation || ce.If != 1 {
+		t.Fatalf("err = %v, want a conflict naming generation %d", err, n.Generation)
+	}
+	if strings.Contains(err.Error(), "no such note") || !strings.Contains(err.Error(), "read it again") {
+		t.Errorf("message = %q", err)
+	}
+	if l, _ := st.List(ctx, true); len(l) != 1 {
+		t.Errorf("%d generations stored, want 1", len(l))
+	}
+	if _, err := Change(ctx, st, "B.md", 1, Edit{Append: sp("x")}); err == nil || !strings.Contains(err.Error(), "no such note") {
+		t.Errorf("missing note: err = %v, want no such note", err)
+	}
+}
