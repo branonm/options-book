@@ -1,7 +1,7 @@
 # Store on Cloud SQL (PostgreSQL)
 
 **Status: decided 2026-11-19 by the owner; steps 1–5 done 2026-11-20; step 6 (removing Firestore from
-the code, the CLI, the server and the Terraform) is in the code as of 2026-11-26; the live plan and deploy are the owner's.** Cloud SQL for PostgreSQL is the only
+the code, the CLI, the server and the Terraform) done and deployed 2026-11-26.** Cloud SQL for PostgreSQL is the only
 store. No third-party database. Where this document says "today" of Firestore, read it as history.
 
 ## Why
@@ -112,7 +112,7 @@ files on every source, the diff and reconcile tests, `TestToolsMatchCLI` and
 | 3. Infrastructure | Terraform: the instance, the IAM database user, `roles/cloudsql.client` for the server's service account, the raised budget | The owner runs `terraform apply`. A test connecting as the server's user shows `UPDATE` and `DELETE` refused |
 | 4. Move the data | `ob db export` from Firestore → `ob db import` into Cloud SQL → `ob db verify` | The Cloud SQL export is **byte-identical** to the Firestore export |
 | 5. Switch the server | `ob-mcp` takes a store flag (`firestore` or `postgres`); deploy | A live check-in done through the server matches the same check-in done with the file tools, byte for byte |
-| 6. Retire Firestore | Remove the Firestore backend, the CLI's `--emulator` and `--project` store flags, the server's fallback to it, and the Terraform database, API and insert-only role | **Code and Terraform changed 2026-11-26** (build, vet and test pass with and without `POSTGRES_DSN`; the replay gate passes on `postgres`). **Open:** the owner's live `terraform plan` must show no changes, and the deploy |
+| 6. Retire Firestore | Remove the Firestore backend, the CLI's `--emulator` and `--project` store flags, the server's fallback to it, and the Terraform database, API and insert-only role | **Done 2026-11-26** (merged as #7, then deployed). Build, vet and test pass with and without `POSTGRES_DSN`, and the replay gate passes on `postgres`. The live `terraform plan` showed no changes, and `verify`, `list_snapshots` and `cred_status` answered as before on the new revision. |
 
 Steps 1 and 2 are offline and can start at any time. Steps 3–6 touch the live server, and
 each waits for the owner's go-ahead.
