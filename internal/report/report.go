@@ -588,7 +588,7 @@ func AccountRefs(cfg *config.Book) []snapshot.AccountRef {
 // then is the closing instruction, which names the CLI or the tool.
 func HistoryPlan(out io.Writer, account string, l *history.Log, then string) {
 	p := l.NextPlan()
-	if len(l.Entries) == 0 {
+	if !l.Observed() {
 		fmt.Fprintf(out, "History for %s is empty: pull the full history with %s and run `ob history add --full`.\n", account, l.FullPull())
 		return
 	}

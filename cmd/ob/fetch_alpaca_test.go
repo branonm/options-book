@@ -42,6 +42,7 @@ type fakeAlpaca struct {
 	open  string // the body for status=open
 	drop  string // an order id left out of windowed (after=) pulls, so only a lookup finds it
 	acct  string // when set, the body served for /v2/account instead of the sample
+	empty bool   // a brand-new account: no orders, no positions
 }
 
 func (f *fakeAlpaca) read(name string) string {
@@ -69,10 +70,18 @@ func (f *fakeAlpaca) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Write([]byte(f.read("account.json")))
 	case r.URL.Path == "/v2/positions":
+		if f.empty {
+			w.Write([]byte(`[]`))
+			return
+		}
 		w.Write([]byte(f.read("positions.json")))
 	case r.URL.Path == "/v2/orders" && r.URL.Query().Get("status") == "open":
 		w.Write([]byte(f.open))
 	case r.URL.Path == "/v2/orders":
+		if f.empty {
+			w.Write([]byte(`[]`))
+			return
+		}
 		body := f.read("orders.json")
 		if f.drop != "" && r.URL.Query().Get("after") != "" {
 			var all []map[string]any
@@ -298,5 +307,55 @@ func TestFetchSnapshotAlpacaChecksLast4(t *testing.T) {
 				t.Errorf("error shows the full account number:\n%s", out.text)
 			}
 		})
+	}
+}
+
+// B9: a brand-new account has no orders. Its snapshot records position 0 of the
+// empty order log instead of failing, seals, and verifies; the next pull is
+// incremental from that observation (B12); and the first order lands as line 1.
+func TestFetchSnapshotAlpacaEmptyAccount(t *testing.T) {
+	f := &fakeAlpaca{t: t, open: `[]`, empty: true}
+	cs, now := alpacaSession(t, f)
+
+	out := callTool(t, cs, "fetch_snapshot", map[string]any{"book": "paper-wheel", "snapshot": "2026-11-10"})
+	if out.isError {
+		t.Fatalf("fetch_snapshot on an empty account: %s", out.text)
+	}
+	for _, want := range []string{"Sealed snapshot 2026-11-10", "full history pull", "appended 0 lines"} {
+		if !strings.Contains(out.text, want) {
+			t.Errorf("report lacks %q:\n%s", want, out.text)
+		}
+	}
+	if v := callTool(t, cs, "verify", nil); v.isError || strings.Contains(v.text, "FAIL") {
+		t.Fatalf("verify after the empty snapshot: %s", v.text)
+	}
+	plan := callTool(t, cs, "history_plan", map[string]any{"account": "paper"})
+	if plan.isError || !strings.Contains(plan.text, "last observed 2026-11-10T15:35:00Z") {
+		t.Errorf("history_plan after the first quiet pull:\n%s", plan.text)
+	}
+
+	// A second quiet pull is incremental (a window, not a full history) and
+	// moves the observation forward.
+	f.calls = nil
+	*now = now.Add(30 * time.Minute)
+	if out := callTool(t, cs, "fetch_snapshot", map[string]any{"book": "paper-wheel", "snapshot": "2026-11-10T1600"}); out.isError {
+		t.Fatalf("second quiet fetch: %s", out.text)
+	} else if strings.Contains(out.text, "full history pull") || !strings.Contains(strings.Join(f.calls, "\n"), "after=2026-11-09T00%3A00%3A00Z") {
+		t.Errorf("second quiet pull wasn't incremental:\n%s\n%v", out.text, f.calls)
+	}
+	plan = callTool(t, cs, "history_plan", map[string]any{"account": "paper"})
+	if !strings.Contains(plan.text, "last observed 2026-11-10T16:05:00Z") {
+		t.Errorf("history_plan after the second quiet pull:\n%s", plan.text)
+	}
+
+	// The first orders arrive: they append from line 1, and the log still verifies.
+	f.empty = false
+	*now = now.Add(30 * time.Minute)
+	out = callTool(t, cs, "fetch_snapshot", map[string]any{"book": "paper-wheel", "snapshot": "2026-11-10T1630"})
+	if out.isError || !strings.Contains(out.text, "appended 5 lines (log now 5)") {
+		t.Fatalf("first orders after an empty position: error=%v\n%s", out.isError, out.text)
+	}
+	if v := callTool(t, cs, "verify", nil); v.isError || strings.Contains(v.text, "FAIL") {
+		t.Fatalf("verify after the first orders: %s", v.text)
 	}
 }

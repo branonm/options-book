@@ -281,7 +281,7 @@ func ReplayRef(dir string, ref history.Ref) ([]broker.Order, error) {
 // ReplayRefFS reconstructs the orders a snapshot saw from the history log in
 // a Source, verifying the prefix fingerprint, decoding each order record with dec.
 func ReplayRefFS(fsys fs.FS, dec broker.Decoder, ref history.Ref) ([]broker.Order, error) {
-	if ref.Log == "" || ref.Lines <= 0 || ref.SHA256 == "" {
+	if ref.Log == "" || ref.Lines < 0 || ref.SHA256 == "" {
 		return nil, fmt.Errorf("history reference needs log, lines and sha256")
 	}
 	l, err := history.LoadFSFor(fsys, ref.Log, dec.Name())

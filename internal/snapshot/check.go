@@ -85,7 +85,7 @@ func CheckAt(at At, accounts []AccountRef) []Problem {
 				add(f(layout.HistoryRef), err.Error(), "rewrite it with `ob history add --snapshot`")
 			} else if orders, err := ReplayRefFS(at.FS, dec, ref); err != nil {
 				add(f(layout.HistoryRef), err.Error(), "restore "+layout.Log(a.Name)+" from git; the log is append-only")
-			} else if len(orders) == 0 {
+			} else if len(orders) == 0 && ref.Lines > 0 {
 				add(f(layout.HistoryRef), "replays to no orders", "re-run `ob history add` with the pull files")
 			}
 		} else {
@@ -115,6 +115,8 @@ func CheckAt(at At, accounts []AccountRef) []Problem {
 	// Equity quotes: one per held symbol, active, all from one session.
 	syms := sortedKeys(held)
 	switch eqs, err := read(at, at.file(layout.EquityQuotes), dec.EquityQuotes); {
+	case errors.Is(err, fs.ErrNotExist) && len(syms) == 0:
+		// Nothing is held, so there is nothing to quote: a new account (B9).
 	case errors.Is(err, fs.ErrNotExist):
 		add(layout.EquityQuotes, "missing", fmt.Sprintf("get_equity_quotes(%s)", strings.Join(syms, ", ")))
 	case err != nil:
