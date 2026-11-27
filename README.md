@@ -38,7 +38,15 @@ own and removes stale ones). Without it those tests are skipped:
 POSTGRES_DSN="postgres://user@127.0.0.1:5432/dbname?sslmode=disable" go test ./...
 ```
 
-See `docs/cloud-sql-design.md` for what this backend is for and what is still to do.
+## Storage
+
+The MCP server keeps its data in **Cloud SQL for PostgreSQL**, the only store (`STORE=cloudsql`, the
+default; `STORE=postgres` is for local testing). The store is create-only: the server's database user is
+granted `SELECT` and `INSERT` and nothing else, a trigger refuses `UPDATE`, `DELETE` and `TRUNCATE`
+for every user, and `store.Open` and `ob db verify` refuse any broken hash, chain or seal. The instance
+has no password and no authorised networks; the server reaches it through the Cloud SQL Go connector
+with IAM database authentication. `infra/gcp` holds the Terraform, and `docs/cloud-sql-design.md` the
+design and the migration runbook.
 
 ## Try it on the synthetic data
 
@@ -73,7 +81,7 @@ regenerates the whole tree.
 | `ob history plan` / `add` | the append-only order log, pulled incrementally |
 | `ob expirations` | record how contracts that ran through expiration finished |
 | `ob reconcile` | the ledger against the broker's own realized option P&L |
-| `ob db` | import, export, verify, migrate and check a store (Firestore or its emulator, or PostgreSQL / Cloud SQL) |
+| `ob db` | import, export, verify, migrate and check a store (Cloud SQL, or a local PostgreSQL) |
 | `ob cred` | manage the broker credentials the server uses |
 
 The server also offers **`recommend`** (no CLI twin: it pulls a live chain). Given a symbol, it pulls
@@ -113,7 +121,7 @@ internal/snapshot        loads and checks a snapshots/<date>/ folder
 internal/history         the append-only order log
 internal/diff, reconcile, render, report, format
 internal/broker          canonical types and one adapter per source (robinhood, alpaca)
-internal/store           the store: Firestore and PostgreSQL backends, and the in-memory one for tests
+internal/store           the store: the PostgreSQL / Cloud SQL backend, and the in-memory one for tests
 internal/layout          where everything lives in the repo layout
 testdata/synthetic       the fictional repo the tests read
 tools/synthfixture       regenerates it

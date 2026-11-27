@@ -10,7 +10,7 @@
 // Every read goes through an At: a read-only view of the repo layout (an
 // fs.FS rooted where snapshots/, history/ and reconcile/ live) plus the
 // snapshot's slash path inside it. OnDisk is the files Source; the
-// Firestore Source (internal/store) presents the same layout from documents.
+// store Source (internal/store) presents the same layout from documents.
 package snapshot
 
 import (

@@ -15,8 +15,7 @@ import (
 func TestSpecLabelHidesTheDSN(t *testing.T) {
 	for spec, want := range map[string]string{
 		"postgres=postgres://user:secret@host/db": "postgres",
-		"emulator=localhost:8080":                 "emulator=localhost:8080",
-		"firestore=some-project":                  "firestore=some-project",
+		"cloudsql=p:r:i/db/user":                  "cloudsql=p:r:i/db/user",
 	} {
 		if got := specLabel(spec); got != want {
 			t.Errorf("specLabel(%q) = %q, want %q", spec, got, want)
@@ -28,7 +27,7 @@ func TestSpecLabelHidesTheDSN(t *testing.T) {
 }
 
 func TestDBRefusesTwoStores(t *testing.T) {
-	err := runDB([]string{"verify", "--postgres", "x", "--emulator", "y"})
+	err := runDB([]string{"verify", "--postgres", "x", "--cloudsql", "p:r:i/d/u"})
 	if err == nil || !strings.Contains(err.Error(), "exactly one") {
 		t.Fatalf("got %v, want a refusal naming exactly one store", err)
 	}
@@ -39,9 +38,9 @@ func TestDBRefusesTwoStores(t *testing.T) {
 
 func TestDBMigrateNeedsPostgres(t *testing.T) {
 	db := store.NewMem()
-	testDBs["emulator=mem"] = db
-	t.Cleanup(func() { delete(testDBs, "emulator=mem") })
-	if err := runDB([]string{"migrate", "--emulator", "mem"}); err == nil {
+	testDBs["postgres=mem"] = db
+	t.Cleanup(func() { delete(testDBs, "postgres=mem") })
+	if err := runDB([]string{"migrate", "--postgres", "mem"}); err == nil {
 		t.Fatal("migrate on a non-PostgreSQL store was accepted")
 	}
 }

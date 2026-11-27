@@ -84,13 +84,13 @@ func usage() {
   ob history add  --account NAME --observed RFC3339 (--created-since YYYY-MM-DD | --full) --pull PAGE1[,PAGE2...] [--pull ...] [--snapshot DIR]
   ob expirations --snapshot DIR [--bars FILE]   (list unresolved expirations, or record them from saved day bars)
   ob reconcile --snapshot DIR --pnl ACCOUNT=FILE [--pnl ...]   (ledger vs Robinhood realized option P&L; exits 1 on a mismatch)
-  ob db import (--emulator HOST:PORT | --project ID | --postgres DSN | --cloudsql INSTANCE/DATABASE/USER) (--from-repo DIR | --from-export DIR)
-  ob db export (--emulator HOST:PORT | --project ID | --postgres DSN | --cloudsql INSTANCE/DATABASE/USER) --to DIR
-  ob db verify (--emulator HOST:PORT | --project ID | --postgres DSN | --cloudsql INSTANCE/DATABASE/USER)
+  ob db import (--postgres DSN | --cloudsql INSTANCE/DATABASE/USER) (--from-repo DIR | --from-export DIR)
+  ob db export (--postgres DSN | --cloudsql INSTANCE/DATABASE/USER) --to DIR
+  ob db verify (--postgres DSN | --cloudsql INSTANCE/DATABASE/USER)
   ob db migrate (--postgres DSN | --cloudsql INSTANCE/DATABASE/USER) [--server-role ROLE]
   ob db check-append-only (--postgres DSN | --cloudsql INSTANCE/DATABASE/USER)   (tries UPDATE, DELETE, TRUNCATE; rolled back)
-  ob db list   (--emulator HOST:PORT | --project ID)
-  ob db show   (--emulator HOST:PORT | --project ID) --snapshot ID [--raw FILE ...]
+  ob db list   (--postgres DSN | --cloudsql INSTANCE/DATABASE/USER)
+  ob db show   (--postgres DSN | --cloudsql INSTANCE/DATABASE/USER) --snapshot ID [--raw FILE ...]
   ob cred enroll robinhood|alpaca-paper --project ID   (sign in / paste the key; stores a new secret version)
   ob cred refresh robinhood --project ID [--force]     (refresh if under two days left; keeps at most two versions)
   ob cred status --project ID                         (version and expiry of each credential; never the secret)
@@ -98,7 +98,7 @@ func usage() {
 every command also takes --book NAME (default ira-wheel; its config is books/NAME/{book,rules}.json) and
 --config, --accounts and --rules to name a file explicitly.
 
-ledger, checkin, ticket, book, diff and reconcile take --source files | emulator=HOST:PORT | firestore=PROJECT
+ledger, checkin, ticket, book, diff and reconcile take --source files | postgres=DSN | cloudsql=INSTANCE/DATABASE/USER
 (default files); with a store source, --snapshot (and --from/--to) name the snapshot id.`)
 	os.Exit(2)
 }
@@ -115,7 +115,7 @@ func flags(name string, args []string, extra func(*flag.FlagSet)) common {
 	fs.StringVar(&c.snap, "snapshot", "", "snapshot directory (e.g. snapshots/2026-11-04)")
 	fs.StringVar(&c.asof, "asof", "", "as-of date, YYYY-MM-DD (default: the snapshot id's session date)")
 	c.register(fs)
-	fs.StringVar(&c.source, "source", "files", "where the snapshot is read from: files | emulator=HOST:PORT | firestore=PROJECT (read-only)")
+	fs.StringVar(&c.source, "source", "files", "where the snapshot is read from: files | postgres=DSN | cloudsql=INSTANCE/DATABASE/USER (read-only)")
 	fs.BoolVar(&c.json, "json", false, "emit JSON")
 	if extra != nil {
 		extra(fs)

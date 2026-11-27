@@ -1,12 +1,14 @@
-// Package store is the Firestore side of phase 2 (the storage design,
-// "Data model (v1, Firestore)"): the collections, an importer from today's
-// file layout, a Source that presents the same layout read back from the
-// documents, and export / import / verify.
+// Package store is the store behind the server (the storage design, with
+// docs/cloud-sql-design.md): the collections, an importer from today's file
+// layout, a Source that presents the same layout read back from the
+// documents, and export / import / verify. Postgres (Cloud SQL) is the real
+// backend; Mem is its in-memory twin for tests.
 //
 // Every write is a create. The document id is the key, so writing an id that
 // exists fails (ErrExists); that is how uniqueness and append-only are
-// enforced, and in production the service account's IAM role has no update or
-// delete permission at all. Nothing in this package updates or deletes.
+// enforced, and in production the database user is granted SELECT and INSERT
+// only and a trigger refuses UPDATE, DELETE and TRUNCATE. Nothing in this
+// package updates or deletes.
 package store
 
 import (
@@ -23,7 +25,7 @@ import (
 
 // Doc is one document's fields. Values are string, int64, bool or []byte
 // only: money is always a string, exactly as Robinhood sent it, never a
-// Firestore number (those are floating point).
+// JSON number (those are floating point).
 type Doc map[string]any
 
 // Item is a listed document.
@@ -96,8 +98,9 @@ func (m *Mem) List(_ context.Context, coll string) ([]Item, error) {
 	return out, nil
 }
 
-// checkID applies Firestore's document-id rules, so the in-memory store
-// refuses what the real one would.
+// checkID applies the document-id rules. Every stored id already obeys them, and
+// the export, import and hash checks rely on ids staying as they are, so they
+// are not loosened. Mem refuses what the real store would.
 func checkID(coll, id string) error {
 	if id == "" || id == "." || id == ".." || strings.Contains(id, "/") ||
 		(strings.HasPrefix(id, "__") && strings.HasSuffix(id, "__")) || len(id) > 1500 {
@@ -125,7 +128,8 @@ func checkText(s string) error {
 	return nil
 }
 
-// MaxDocBytes is a conservative bound under Firestore's 1 MiB document cap.
+// MaxDocBytes bounds a document at a little under 1 MiB. Every stored document
+// fits, so it is not loosened.
 const MaxDocBytes = 1000 << 10
 
 func checkDoc(d Doc) error {
@@ -238,6 +242,5 @@ func byts(d Doc, k string) ([]byte, error) {
 // Every backend must satisfy DB; a drifting method signature fails the build here.
 var (
 	_ DB = (*Mem)(nil)
-	_ DB = (*Firestore)(nil)
 	_ DB = (*Postgres)(nil)
 )

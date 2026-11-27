@@ -1,9 +1,9 @@
 package main
 
-// `ob db` and the --source flag: the phase 2 store (internal/store,
-// the storage design). These read and write Firestore as whoever runs
-// them — the owner's own account on his machine, or the local emulator — never
-// a broker, and nothing here updates or deletes a document.
+// `ob db` and the --source flag: the store (internal/store, the storage
+// design). These read and write Cloud SQL as whoever runs them (IAM sign-in
+// through the owner's Application Default Credentials), or a local PostgreSQL,
+// never a broker, and nothing here updates or deletes a document.
 
 import (
 	"context"
@@ -21,11 +21,7 @@ import (
 	"github.com/branonm/options-book/internal/store"
 )
 
-// emulatorProject is the project id `ob db --emulator` and
-// `--source emulator=…` use; any id works on the emulator.
-const emulatorProject = "options-book"
-
-// openDB parses a store spec: emulator=HOST:PORT or firestore=PROJECT.
+// openDB parses a store spec: postgres=DSN or cloudsql=INSTANCE/DATABASE/USER.
 // testDBs lets tests point a store spec at an in-memory store. Empty in the binary.
 var testDBs = map[string]store.DB{}
 
@@ -35,10 +31,6 @@ func openDB(spec string) (store.DB, error) {
 	}
 	kind, arg, ok := strings.Cut(spec, "=")
 	switch {
-	case ok && kind == "emulator" && arg != "":
-		return store.NewEmulator(arg, emulatorProject), nil
-	case ok && kind == "firestore" && arg != "":
-		return store.NewFirestore(context.Background(), arg, "(default)")
 	case ok && kind == "postgres" && arg != "":
 		return store.NewPostgres(context.Background(), arg, "")
 	case ok && kind == "cloudsql" && arg != "":
@@ -49,7 +41,7 @@ func openDB(spec string) (store.DB, error) {
 		}
 		return store.NewCloudSQL(context.Background(), parts[0], parts[1], parts[2])
 	}
-	return nil, fmt.Errorf("--source %q: want files, emulator=HOST:PORT, firestore=PROJECT, postgres=DSN or cloudsql=INSTANCE/DATABASE/USER", specLabel(spec))
+	return nil, fmt.Errorf("--source %q: want files, postgres=DSN or cloudsql=INSTANCE/DATABASE/USER", specLabel(spec))
 }
 
 // specLabel is a store spec as it may be printed: a PostgreSQL DSN can carry a
@@ -136,8 +128,6 @@ func runDB(args []string) error {
 	}
 	sub := args[0]
 	fset := flag.NewFlagSet("db "+sub, flag.ExitOnError)
-	emulator := fset.String("emulator", "", "local Firestore emulator, HOST:PORT")
-	project := fset.String("project", "", "live GCP project (uses your Application Default Credentials)")
 	postgres := fset.String("postgres", "", "a PostgreSQL store, as a DSN (it may carry a password; it is never printed)")
 	cloudsql := fset.String("cloudsql", "", "a Cloud SQL store, PROJECT:REGION:INSTANCE/DATABASE/IAM_USER (IAM sign-in through your Application Default Credentials)")
 	serverRole := fset.String("server-role", "", "migrate: the database role to grant SELECT and INSERT on the store, and nothing else")
@@ -152,7 +142,7 @@ func runDB(args []string) error {
 	var spec string
 	given := 0
 	for _, f := range []struct{ flag, kind string }{
-		{*emulator, "emulator"}, {*project, "firestore"}, {*postgres, "postgres"}, {*cloudsql, "cloudsql"},
+		{*postgres, "postgres"}, {*cloudsql, "cloudsql"},
 	} {
 		if f.flag != "" {
 			given++
@@ -160,7 +150,7 @@ func runDB(args []string) error {
 		}
 	}
 	if given != 1 {
-		return fmt.Errorf("ob db %s: give exactly one of --emulator HOST:PORT, --project ID, --postgres DSN or --cloudsql INSTANCE/DATABASE/USER", sub)
+		return fmt.Errorf("ob db %s: give exactly one of --postgres DSN or --cloudsql INSTANCE/DATABASE/USER", sub)
 	}
 	db, err := openDB(spec)
 	if err != nil {

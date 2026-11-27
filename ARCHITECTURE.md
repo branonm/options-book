@@ -73,7 +73,7 @@ cmd/ob, cmd/agent-tools                 wiring, flags, output, exit codes
   obmcp                                  the server's tools: report over the store, run records
   report                                 every figure-producing command's output (CLI and tools)
   render   diff   reconcile   risk       on top of the model
-  store                                  the append-only store (Cloud SQL, Firestore), importer, Source, export/verify (above snapshot)
+  store                                  the append-only store (Cloud SQL), importer, Source, export/verify (above snapshot)
     book                                 domain model + every check
       ledger                             pure math: orders → legs, blocks, breakevens
         snapshot   history                loading, sealing, replay
@@ -99,7 +99,7 @@ cmd/ob, cmd/agent-tools                 wiring, flags, output, exit codes
 | `internal/rhmcp` | `ob-mcp`'s Robinhood MCP client. Only the 12 tools on `Allowlist`; a mutating name fails `TestAllowlistIsReadOnly` and panics at init. Returns `content[0].text` verbatim; follows `next` or refuses |
 | `internal/obmcp` | `ob-mcp`'s tools. Each figure-producing tool calls `report`, returns its text unchanged, and records a `run` (exit code and run id go in structured content only) |
 | `internal/gauth` | Google sign-in for `ob-mcp`: protected-resource metadata, the token + allowed-account check, source logged never gated (B6). Copied from the phase 1 spike |
-| `internal/store` | The store's collections behind a create-only `DB` with three backends: `Postgres` (`postgres.go`, one `doc` table from `postgres_schema.sql`; `NewCloudSQL` reaches Cloud SQL through the Go connector with IAM sign-in, no password), `Firestore` (REST) and `Mem` for tests. Cloud SQL is the live store; Firestore is still the code's and Terraform's default (`STORE`, `store_backend`). `ImportRepo` from today's files; `Open` reads the store back as the repo layout (an `fs.FS` Source) and refuses it on any hash, chain or seal mismatch; `Export` / `ImportExport` / `Verify`. `storetest.Sources` gives tests every source |
+| `internal/store` | The store's collections behind a create-only `DB` with two backends: `Postgres` (`postgres.go`, one `doc` table from `postgres_schema.sql`; `NewCloudSQL` reaches Cloud SQL through the Go connector with IAM sign-in, no password) and `Mem` for tests. Cloud SQL is the only store, and the code's and Terraform's default. `ImportRepo` from today's files; `Open` reads the store back as the repo layout (an `fs.FS` Source) and refuses it on any hash, chain or seal mismatch; `Export` / `ImportExport` / `Verify`. `storetest.Sources` gives tests every source |
 | `internal/notes` | The owner's working notes (`PLAN.md`, `BUGS.md`, design docs) in a private, versioned bucket (`NOTES_BUCKET`), standard library only. A `Store` (`List`, `Read`, `Write`) with an in-memory twin for tests and a Cloud Storage JSON API client. **Every write is guarded by the generation the caller read** (`ifGenerationMatch`; 0 creates), so a stale edit is a `*ConflictError` instead of an overwrite, and the versioned bucket keeps every earlier generation. `Change` applies one of three edits (replace all, append, or replace the one place `old` occurs) to the note as read and writes it back against the same generation. **There is no delete path** at any layer, and no note is larger than 1 MiB. `obmcp`'s `notes_list`, `notes_read` and `notes_write` are the only way a Claude session reaches it, and they exist only when `NOTES_BUCKET` is set; an unusable bucket is logged and reported by the tools, never fatal to the server |
 | `internal/strategy/wheel` | The domain model — `Book → Pool → Account → Block → ShortCall/ShortPut → Closer` — and `Check` on each. Also `Ticket` (proposals) |
 | `internal/render` | Markdown wheel-book tables, golden-tested, spliced between `BEGIN/END GENERATED` markers |
@@ -254,7 +254,7 @@ deliberate decision (the owner, 11/05). Put the check on the smallest type that 
 Every loader reads through a **Source**: a read-only `fs.FS` laid out like the repo
 (`snapshots/<id>/…`, `history/…`, `reconcile/…`), paired with the snapshot's path in a
 `snapshot.At`. `snapshot.OnDisk(dir)` is the files Source; `store.Open` builds the same
-layout from the store's documents (Cloud SQL or Firestore), regenerating `history.json`, `manifest.json`, the order
+layout from the store's documents, regenerating `history.json`, `manifest.json`, the order
 logs and `expirations.json` with the encoders that wrote them. So **a new loader must read
 through `At` / `fs.FS`, never `os`**, or it silently works on files only.
 
@@ -270,8 +270,7 @@ check-ins through the tools and requires the result to equal the file run byte f
 byte.
 
 Acceptance, golden, diff and reconcile tests loop over `storetest.Sources(t)`: `files`,
-`memory` (the repo imported into the in-memory store), `emulator` when
-`FIRESTORE_EMULATOR_HOST` is set, and `postgres` when `POSTGRES_DSN` names a local
+`memory` (the repo imported into the in-memory store) and `postgres` when `POSTGRES_DSN` names a local
 PostgreSQL 16. A test that must hold on real data should do the same.
 
 **Paths come from `internal/layout`.** Never write `"snapshots/" + id`, `"history/…"`, a
@@ -282,8 +281,8 @@ config path, or a snapshot file name such as `"equity_quotes.json"` in non-test 
 
 ## Storage and credentials: why it is built this way
 
-The server (`ob-mcp`, Cloud Run) keeps its data in Cloud SQL for PostgreSQL (Firestore
-until 2026-11-20; the design is `docs/cloud-sql-design.md`). That store is the agent's
+The server (`ob-mcp`, Cloud Run) keeps its data in Cloud SQL for PostgreSQL
+(the design is `docs/cloud-sql-design.md`). That store is the agent's
 **memory**, not only a copy of broker snapshots: every figure-producing call records a
 create-only `run` document, and later phases are meant to hold the agent's recommendations,
 risk checks and staged proposals the same way, so a later session can read them back.
@@ -296,9 +295,7 @@ risk checks and staged proposals the same way, so a later session can read them 
   visible act. Every write is therefore an insert that must not already exist, and sealing a
   snapshot is itself an insert, so it happens once and cannot be undone. `ob db
   check-append-only` proves the refusals against a live instance, and `store.Open` and
-  `Verify` refuse any hash, chain or seal mismatch, so tampering would show. (On Firestore the
-  same rule is a custom IAM role, `optionsBookInsertOnly`, with get, list and create and no
-  update or delete.)
+  `Verify` refuse any hash, chain or seal mismatch, so tampering would show.
 - **Credentials have one writer.** The server reads the latest version of each secret and
   nothing else in Secret Manager. Only a separate job (`options-book-cred-refresher`, role in
   `infra/gcp/credentials.tf`, no database access) writes the Robinhood token, so the server

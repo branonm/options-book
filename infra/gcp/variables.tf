@@ -35,22 +35,6 @@ variable "allowed_email" {
   sensitive   = true
 }
 
-variable "enable_cloudsql" {
-  description = "Create the Cloud SQL (PostgreSQL) store. Off by default: see cloudsql.tf and docs/cloud-sql-design.md."
-  type        = bool
-  default     = false
-}
-
-variable "store_backend" {
-  description = "Which store the server uses: firestore (the default) or cloudsql. Switching to cloudsql needs enable_cloudsql and a migrated, imported database."
-  type        = string
-  default     = "firestore"
-  validation {
-    condition     = contains(["firestore", "cloudsql"], var.store_backend)
-    error_message = "store_backend must be firestore or cloudsql."
-  }
-}
-
 variable "cloudsql_tier" {
   description = "Cloud SQL machine tier. The smallest shared-core tier is enough for one user."
   type        = string
@@ -64,7 +48,7 @@ variable "cloudsql_database" {
 }
 
 variable "cloudsql_budget_usd" {
-  description = "Monthly budget amount (whole USD) once Cloud SQL is enabled, replacing the $1 guard. An alert threshold, not a cap. 20 covers the default instance (list prices of 2026-11-20: about $10 a month, up to about $17.50 if the public IPv4 address is billed at $0.01 an hour); re-check before changing the tier or disk."
+  description = "Monthly budget amount (whole USD) for the project's billing guard. An alert threshold, not a cap. 20 covers the default instance (list prices of 2026-11-20: about $10 a month, up to about $17.50 if the public IPv4 address is billed at $0.01 an hour); re-check before changing the tier or disk."
   type        = string
   default     = "20"
 }
@@ -79,12 +63,6 @@ variable "name_prefix" {
   description = "Prefix for the Artifact Registry repository id and the display names and titles of the service accounts, custom roles and budget. The default suits a new project. Changing it on a project that already exists renames display names in place, but the repository id cannot change: Terraform would delete and recreate the repository, and its images with it. A project created under another name keeps that name here."
   type        = string
   default     = "options-book"
-}
-
-variable "enable_firestore" {
-  description = "Create the Firestore database, its insert-only role and binding. True (the default) keeps what an existing project has. Set false for a project that runs on Cloud SQL from the start (store_backend = \"cloudsql\"): the server does not use Firestore then, and a project with it off cannot switch back to it without setting this true again."
-  type        = bool
-  default     = true
 }
 
 variable "notes_bucket" {

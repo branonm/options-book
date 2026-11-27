@@ -1,5 +1,5 @@
 // Command ob-mcp is the remote MCP server in the storage design: the
-// wheel-book tools over the Firestore store, behind Google sign-in, on Cloud
+// wheel-book tools over the Cloud SQL store, behind Google sign-in, on Cloud
 // Run. It serves the read and write tools (internal/obmcp) and, since phase
 // 5, fetch_snapshot, which pulls from Robinhood through internal/rhmcp's
 // read-only allowlist using the token it reads from Secret Manager (it never
@@ -17,9 +17,8 @@
 //	OAUTH_CLIENT_ID          Google OAuth client id Claude signs in with (required)
 //	ALLOWED_EMAIL            the one Google account allowed in (required)
 //	PUBLIC_URL               https://<service>.run.app, no trailing slash (required)
-//	PROJECT_ID               GCP project holding the Firestore database (required)
-//	FIRESTORE_DB             database id (default "(default)")
-//	STORE                    "firestore" (default), "cloudsql" or "postgres" (local testing only)
+//	PROJECT_ID               GCP project holding the Secret Manager secrets (required)
+//	STORE                    "cloudsql" (default) or "postgres" (local testing only)
 //	CLOUDSQL_INSTANCE        STORE=cloudsql: the connection name, PROJECT:REGION:INSTANCE
 //	CLOUDSQL_DATABASE        STORE=cloudsql: the database name
 //	CLOUDSQL_USER            STORE=cloudsql: the IAM database user (the service account email without .gserviceaccount.com)
@@ -27,7 +26,6 @@
 //	CONFIG_BUCKET            optional: a bucket holding accounts.json and books/<book>/{book,rules}.json, read at startup instead of the compiled-in defaults (fails closed)
 //	NOTES_BUCKET             optional: a private, versioned bucket for the owner's working notes (notes/<name>.md), served by notes_list, notes_read and notes_write; an unusable one is logged and the tools report it, the server still starts
 //	CACHE_TTL                how long an opened, verified store is reused (default 5m)
-//	FIRESTORE_EMULATOR_HOST  use the local emulator instead (local testing only)
 //	LOCAL_TESTING            "true" allows an http PUBLIC_URL (local testing only)
 //	PORT                     listen port (default 8080; Cloud Run sets it)
 package main
@@ -73,12 +71,9 @@ func run() error {
 	if err := auth.Validate(); err != nil {
 		return err
 	}
-	project, database := get("PROJECT_ID"), get("FIRESTORE_DB")
+	project := get("PROJECT_ID")
 	if project == "" {
 		return fmt.Errorf("missing environment: PROJECT_ID")
-	}
-	if database == "" {
-		database = "(default)"
 	}
 	ttl := 5 * time.Minute
 	if v := get("CACHE_TTL"); v != "" {
@@ -89,7 +84,7 @@ func run() error {
 		ttl = d
 	}
 
-	deps, err := newDepsStore(project, database, get("FIRESTORE_EMULATOR_HOST"), storeConfig{
+	deps, err := newDepsStore(project, storeConfig{
 		Kind: get("STORE"), Instance: get("CLOUDSQL_INSTANCE"), Database: get("CLOUDSQL_DATABASE"), User: get("CLOUDSQL_USER"), DSN: get("POSTGRES_DSN"), ConfigBucket: get("CONFIG_BUCKET"), NotesBucket: get("NOTES_BUCKET"),
 	}, ttl)
 	if err != nil {
@@ -114,10 +109,10 @@ func newHandler(auth gauth.Config, v gauth.Verifier, deps *obmcp.Deps) http.Hand
 	return gauth.Handler(auth, v, mcpHandler)
 }
 
-// storeConfig picks the store behind the server. The zero value is Firestore,
-// which is what is deployed today; Cloud SQL is chosen by STORE=cloudsql.
+// storeConfig picks the store behind the server. The zero value is Cloud SQL,
+// the live store; a local PostgreSQL is chosen by STORE=postgres (testing only).
 type storeConfig struct {
-	Kind     string // "", "firestore", "cloudsql" or "postgres"
+	Kind     string // "" or "cloudsql", or "postgres"
 	Instance string // cloudsql: PROJECT:REGION:INSTANCE
 	Database string // cloudsql: database name
 	User     string // cloudsql: IAM database user
@@ -134,11 +129,9 @@ type storeConfig struct {
 	NotesBucket string
 }
 
-func newDeps(project, database, emulator string, ttl time.Duration) (*obmcp.Deps, error) {
-	return newDepsStore(project, database, emulator, storeConfig{}, ttl)
-}
-
-func newDepsStore(project, database, emulator string, sc storeConfig, ttl time.Duration) (*obmcp.Deps, error) {
+// newDepsConfig is the server's dependencies without a store or credentials:
+// the books, rules and accounts (compiled in, or from the config bucket).
+func newDepsConfig(sc storeConfig, ttl time.Duration) (*obmcp.Deps, error) {
 	cs, err := embeddedConfig()
 	if sc.ConfigBucket != "" {
 		var objs objectStore
@@ -170,18 +163,26 @@ func newDepsStore(project, database, emulator string, sc storeConfig, ttl time.D
 	if bks[layout.DefaultBook] == nil {
 		return nil, fmt.Errorf("the default book %q is not in the configuration (%s)", layout.DefaultBook, cs.Origin)
 	}
-	var db store.DB
-	spec := "firestore=" + project
-	switch {
-	case emulator != "":
-		db, spec = store.NewEmulator(emulator, project), "emulator="+emulator
-	case sc.Kind == "cloudsql":
+	return &obmcp.Deps{
+		Books: bks, DefaultBook: layout.DefaultBook, Accounts: accounts, AccountsSHA: store.SHA256(cs.Accounts),
+		Commit: buildCommit(), CacheTTL: ttl,
+	}, nil
+}
+
+// newDepsStore adds the store, the credentials and the notes to newDepsConfig.
+func newDepsStore(project string, sc storeConfig, ttl time.Duration) (*obmcp.Deps, error) {
+	d, err := newDepsConfig(sc, ttl)
+	if err != nil {
+		return nil, err
+	}
+	switch sc.Kind {
+	case "", "cloudsql":
 		pg, err := store.NewCloudSQL(context.Background(), sc.Instance, sc.Database, sc.User)
 		if err != nil {
 			return nil, err
 		}
-		db, spec = pg, "cloudsql="+sc.Instance+"/"+sc.Database
-	case sc.Kind == "postgres":
+		d.DB, d.Spec = pg, "cloudsql="+sc.Instance+"/"+sc.Database
+	case "postgres":
 		if sc.DSN == "" {
 			return nil, fmt.Errorf("STORE=postgres needs POSTGRES_DSN")
 		}
@@ -189,24 +190,14 @@ func newDepsStore(project, database, emulator string, sc storeConfig, ttl time.D
 		if err != nil {
 			return nil, err
 		}
-		db, spec = pg, "postgres"
-	case sc.Kind == "" || sc.Kind == "firestore":
-		fdb, err := store.NewFirestore(context.Background(), project, database)
-		if err != nil {
-			return nil, err
-		}
-		db = fdb
+		d.DB, d.Spec = pg, "postgres"
 	default:
-		return nil, fmt.Errorf("STORE=%q: want firestore, cloudsql or postgres", sc.Kind)
-	}
-	d := &obmcp.Deps{
-		Books: bks, DefaultBook: layout.DefaultBook, Accounts: accounts, AccountsSHA: store.SHA256(cs.Accounts),
-		DB: db, Spec: spec, Commit: buildCommit(), CacheTTL: ttl,
+		return nil, fmt.Errorf("STORE=%q: want cloudsql or postgres", sc.Kind)
 	}
 	// Phase 5: on the live store, the credentials are read from Secret Manager
 	// (the server's service account can read the latest versions, never write).
-	// The emulator has no credentials, so fetch_snapshot and cred_status aren't offered.
-	if emulator == "" && sc.Kind != "postgres" {
+	// A local postgres has no credentials, so fetch_snapshot and cred_status aren't offered.
+	if sc.Kind != "postgres" {
 		v, err := cred.NewSecretManager(context.Background(), project)
 		if err != nil {
 			return nil, err

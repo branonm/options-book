@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/branonm/options-book/internal/layout"
 	"io/fs"
 	"os"
@@ -112,10 +111,6 @@ func writeSession(t *testing.T, fsys fs.FS) (*mcp.ClientSession, store.DB, *time
 	t.Helper()
 	ctx := context.Background()
 	var db store.DB = store.NewMem()
-	if host := os.Getenv("FIRESTORE_EMULATOR_HOST"); host != "" {
-		// A fresh emulator project per session: the real Firestore API's create semantics.
-		db = store.NewEmulator(host, fmt.Sprintf("wt-%d", time.Now().UnixNano()))
-	}
 	if dsn := os.Getenv("POSTGRES_DSN"); dsn != "" {
 		// A scratch schema per session: the real create semantics, append-only trigger included.
 		p, cleanup, err := store.ScratchPostgres(ctx, dsn)

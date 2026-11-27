@@ -4,21 +4,17 @@
 //
 //	files      the repo on disk, as the tools read it today
 //	memory     the repo imported into the in-memory store and read back
-//	emulator   the repo imported into the Firestore emulator and read back;
-//	           only when FIRESTORE_EMULATOR_HOST is set (see README)
 //	postgres   the repo imported into a scratch schema of a PostgreSQL database
 //	           and read back; only when POSTGRES_DSN is set (see README)
 package storetest
 
 import (
 	"context"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/branonm/options-book/internal/store"
 )
@@ -68,9 +64,6 @@ var (
 	memOnce sync.Once
 	memFS   fs.FS
 	memErr  error
-	emuOnce sync.Once
-	emuFS   fs.FS
-	emuErr  error
 	pgOnce  sync.Once
 	pgFS    fs.FS
 	pgErr   error
@@ -89,20 +82,6 @@ func Sources(t testing.TB) []Source {
 		t.Fatalf("memory source: %v", memErr)
 	}
 	out = append(out, Source{Name: "memory", FS: memFS})
-
-	if host := os.Getenv("FIRESTORE_EMULATOR_HOST"); host != "" {
-		emuOnce.Do(func() {
-			// A fresh project per test binary, so runs never see each other's data.
-			db := store.NewEmulator(host, fmt.Sprintf("options-book-test-%d-%d", time.Now().UnixNano(), os.Getpid()))
-			emuFS, emuErr = imported(db, disk)
-		})
-		if emuErr != nil {
-			t.Fatalf("emulator source: %v", emuErr)
-		}
-		out = append(out, Source{Name: "emulator", FS: emuFS})
-	} else {
-		t.Log("FIRESTORE_EMULATOR_HOST not set: the emulator source is skipped")
-	}
 
 	if dsn := os.Getenv("POSTGRES_DSN"); dsn != "" {
 		pgOnce.Do(func() { pgFS, pgErr = importedPostgres(dsn, disk) })

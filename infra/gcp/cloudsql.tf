@@ -1,9 +1,5 @@
-# The Cloud SQL (PostgreSQL) store, an alternative to Firestore. See
-# docs/cloud-sql-design.md.
-#
-# Everything here is off by default: with enable_cloudsql = false (the default)
-# applying this file creates, changes and destroys nothing. Turn it on only when
-# you mean to run the migration, and read the runbook in the design doc first.
+# The Cloud SQL (PostgreSQL) store, the only store. See docs/cloud-sql-design.md
+# for the design and the runbook.
 #
 # What this creates, and what it deliberately leaves to a person:
 #   - the instance (public address, no authorised networks; reached only through
@@ -18,19 +14,16 @@
 # holds a database password.
 
 locals {
-  cloudsql_count = var.enable_cloudsql ? 1 : 0
   # Cloud SQL names a service account's IAM database user without this suffix.
   server_db_user = trimsuffix(google_service_account.mcp.email, ".gserviceaccount.com")
 }
 
 resource "google_project_service" "sqladmin" {
-  count              = local.cloudsql_count
   service            = "sqladmin.googleapis.com"
   disable_on_destroy = false
 }
 
 resource "google_sql_database_instance" "main" {
-  count               = local.cloudsql_count
   name                = "options-book-pg"
   region              = var.region
   database_version    = "POSTGRES_16"
@@ -69,34 +62,31 @@ resource "google_sql_database_instance" "main" {
 }
 
 resource "google_sql_database" "main" {
-  count    = local.cloudsql_count
   name     = var.cloudsql_database
-  instance = google_sql_database_instance.main[0].name
+  instance = google_sql_database_instance.main.name
 }
 
 resource "google_sql_user" "server" {
-  count    = local.cloudsql_count
-  instance = google_sql_database_instance.main[0].name
+  instance = google_sql_database_instance.main.name
   name     = local.server_db_user
   type     = "CLOUD_IAM_SERVICE_ACCOUNT"
 }
 
 resource "google_sql_user" "owner" {
-  count    = local.cloudsql_count
-  instance = google_sql_database_instance.main[0].name
+  instance = google_sql_database_instance.main.name
   name     = var.allowed_email
   type     = "CLOUD_IAM_USER"
 }
 
 resource "google_project_iam_member" "server_cloudsql" {
-  for_each = var.enable_cloudsql ? toset(["roles/cloudsql.client", "roles/cloudsql.instanceUser"]) : toset([])
+  for_each = toset(["roles/cloudsql.client", "roles/cloudsql.instanceUser"])
   project  = var.project_id
   role     = each.value
   member   = "serviceAccount:${google_service_account.mcp.email}"
 }
 
 resource "google_project_iam_member" "owner_cloudsql" {
-  for_each = var.enable_cloudsql ? toset(["roles/cloudsql.client", "roles/cloudsql.instanceUser"]) : toset([])
+  for_each = toset(["roles/cloudsql.client", "roles/cloudsql.instanceUser"])
   project  = var.project_id
   role     = each.value
   member   = "user:${var.allowed_email}"
@@ -104,10 +94,37 @@ resource "google_project_iam_member" "owner_cloudsql" {
 
 output "cloudsql_connection_name" {
   description = "PROJECT:REGION:INSTANCE, for `ob db --cloudsql <this>/<database>/<user>`."
-  value       = var.enable_cloudsql ? google_sql_database_instance.main[0].connection_name : null
+  value       = google_sql_database_instance.main.connection_name
 }
 
 output "cloudsql_server_user" {
   description = "The server's IAM database user: pass it to `ob db migrate --server-role`."
-  value       = var.enable_cloudsql ? local.server_db_user : null
+  value       = local.server_db_user
+}
+
+# These five lost their count (enable_cloudsql); keep existing state attached,
+# so the plan does not replace the database.
+moved {
+  from = google_project_service.sqladmin[0]
+  to   = google_project_service.sqladmin
+}
+
+moved {
+  from = google_sql_database_instance.main[0]
+  to   = google_sql_database_instance.main
+}
+
+moved {
+  from = google_sql_database.main[0]
+  to   = google_sql_database.main
+}
+
+moved {
+  from = google_sql_user.server[0]
+  to   = google_sql_user.server
+}
+
+moved {
+  from = google_sql_user.owner[0]
+  to   = google_sql_user.owner
 }

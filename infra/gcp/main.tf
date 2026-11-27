@@ -1,8 +1,8 @@
 # Phase 1 spike infrastructure (the storage design).
 #
-# Creates: the APIs, a Firestore database, an Artifact Registry repository,
-# the options-book-mcp service account with an insert-only custom role, the Cloud
-# Run service, and a $1 billing budget.
+# Creates: the APIs, an Artifact Registry repository, the options-book-mcp
+# service account, the Cloud Run service, and a billing budget. The store
+# (Cloud SQL) is in cloudsql.tf.
 #
 # Not created here (done by hand, see spike/gcpping/README.md): the project
 # itself, the OAuth consent screen and the OAuth client Claude signs in with.
@@ -47,14 +47,14 @@ resource "google_project_iam_member" "cloudbuild_default_sa" {
 }
 
 locals {
-  apis = concat(var.enable_firestore ? ["firestore.googleapis.com"] : [], [
+  apis = [
     "run.googleapis.com",
     "storage.googleapis.com",
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",
     "iam.googleapis.com",
     "billingbudgets.googleapis.com",
-  ])
+  ]
   # Cloud Run's deterministic URL, so the server can be told its own address
   # in the same apply that creates it.
   public_url = "https://${var.service_name}-${data.google_project.this.number}.${var.region}.run.app"
@@ -64,16 +64,6 @@ resource "google_project_service" "apis" {
   for_each           = toset(local.apis)
   service            = each.value
   disable_on_destroy = false
-}
-
-resource "google_firestore_database" "main" {
-  count                   = var.enable_firestore ? 1 : 0
-  name                    = "(default)"
-  location_id             = var.region
-  type                    = "FIRESTORE_NATIVE"
-  delete_protection_state = "DELETE_PROTECTION_ENABLED"
-  deletion_policy         = "ABANDON"
-  depends_on              = [google_project_service.apis]
 }
 
 resource "google_artifact_registry_repository" "images" {
@@ -103,28 +93,6 @@ resource "google_service_account" "mcp" {
   depends_on   = [google_project_service.apis]
   account_id   = "options-book-mcp"
   display_name = "${var.name_prefix} MCP server"
-}
-
-# The append-only guarantee: create, read and list, never update or delete.
-resource "google_project_iam_custom_role" "insert_only" {
-  depends_on  = [google_project_service.apis]
-  count       = var.enable_firestore ? 1 : 0
-  role_id     = "optionsBookInsertOnly"
-  title       = "${var.name_prefix} insert-only Firestore access"
-  description = "Create and read Firestore documents; no update, no delete."
-  permissions = [
-    "datastore.databases.get",
-    "datastore.entities.get",
-    "datastore.entities.list",
-    "datastore.entities.create",
-  ]
-}
-
-resource "google_project_iam_member" "mcp_insert_only" {
-  count   = var.enable_firestore ? 1 : 0
-  project = var.project_id
-  role    = google_project_iam_custom_role.insert_only[0].id
-  member  = "serviceAccount:${google_service_account.mcp.email}"
 }
 
 resource "google_cloud_run_v2_service" "mcp" {
@@ -177,37 +145,34 @@ resource "google_cloud_run_v2_service" "mcp" {
           value = env.value
         }
       }
-      # Which store the server reads and writes. Firestore (no STORE variable) is
-      # the default; "cloudsql" is the switch in docs/cloud-sql-design.md, step 5.
-      dynamic "env" {
-        for_each = var.store_backend == "cloudsql" ? {
-          STORE             = "cloudsql"
-          CLOUDSQL_INSTANCE = google_sql_database_instance.main[0].connection_name
-          CLOUDSQL_DATABASE = var.cloudsql_database
-          CLOUDSQL_USER     = local.server_db_user
-        } : {}
-        content {
-          name  = env.key
-          value = env.value
-        }
+      # The store the server reads and writes: Cloud SQL (docs/cloud-sql-design.md).
+      # The order is the one the live service already has (the keys, sorted), so
+      # the plan shows no change to the list.
+      env {
+        name  = "CLOUDSQL_DATABASE"
+        value = var.cloudsql_database
+      }
+      env {
+        name  = "CLOUDSQL_INSTANCE"
+        value = google_sql_database_instance.main.connection_name
+      }
+      env {
+        name  = "CLOUDSQL_USER"
+        value = local.server_db_user
+      }
+      env {
+        name  = "STORE"
+        value = "cloudsql"
       }
     }
   }
-  depends_on = [google_project_service.apis, google_project_iam_member.mcp_insert_only, google_storage_bucket_iam_member.config_reader, google_storage_bucket_iam_member.notes_writer]
+  depends_on = [google_project_service.apis, google_storage_bucket_iam_member.config_reader, google_storage_bucket_iam_member.notes_writer]
 
   # Google fills in a service-level scaling block with its defaults (min 0,
   # manual 0) after every apply, and Terraform would clear it every time, a
   # permanent diff that hides real ones. Our scaling is template.scaling above.
   lifecycle {
     ignore_changes = [scaling]
-    precondition {
-      condition     = var.store_backend != "cloudsql" || var.enable_cloudsql
-      error_message = "store_backend = \"cloudsql\" needs enable_cloudsql = true."
-    }
-    precondition {
-      condition     = var.store_backend != "firestore" || var.enable_firestore
-      error_message = "store_backend = \"firestore\" needs enable_firestore = true."
-    }
   }
 }
 
@@ -230,7 +195,7 @@ resource "google_billing_budget" "guard" {
   amount {
     specified_amount {
       currency_code = "USD"
-      units         = var.enable_cloudsql ? var.cloudsql_budget_usd : "1"
+      units         = var.cloudsql_budget_usd
     }
   }
   threshold_rules { threshold_percent = 0.5 }
@@ -249,20 +214,4 @@ output "service_account" {
 
 output "image_repository" {
   value = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.images.repository_id}"
-}
-
-# These three gained a count (enable_firestore); keep existing state attached.
-moved {
-  from = google_firestore_database.main
-  to   = google_firestore_database.main[0]
-}
-
-moved {
-  from = google_project_iam_custom_role.insert_only
-  to   = google_project_iam_custom_role.insert_only[0]
-}
-
-moved {
-  from = google_project_iam_member.mcp_insert_only
-  to   = google_project_iam_member.mcp_insert_only[0]
 }
