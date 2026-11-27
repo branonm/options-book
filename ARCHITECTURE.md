@@ -46,13 +46,13 @@ The server never places an order: Claude places orders only through the broker's
 connector, and only after the owner says yes. See "Storage and credentials" below for why
 each piece is built the way it is.
 
-## Two binaries, one module
+## Three binaries, one module
 
 | Binary | Package | Contacts a broker? |
 |---|---|---|
 | `ob` | `cmd/ob` | **No.** Pure functions over saved Robinhood MCP responses |
 | `agent-tools` | `cmd/agent-tools` | **Yes**, Alpaca **paper** only (`internal/alpaca`), pinned to `paper-api.alpaca.markets`. Serves MCP over stdio |
-| `ob-mcp` | `cmd/ob-mcp` | **No.** The remote MCP server (the storage design): the read tools over the Firestore store, behind Google sign-in, on Cloud Run. No broker credentials, no order path; its only write is a create-only `run` document per figure-producing call |
+| `ob-mcp` | `cmd/ob-mcp` | **No.** The remote MCP server, on Cloud Run behind Google sign-in: the wheel-book tools over the append-only store (Cloud SQL in the live deployment), plus `recommend` and the notes tools. Pulls from Robinhood only through a compiled read-only allowlist (`internal/rhmcp`). No order path; every write is a create, and every figure-producing call records a `run` |
 
 Every binary lives under `cmd/` (the repo root holds no Go package). `cmd/ob`'s tests name
 snapshots, history and fixtures relative to the repo root, so its `TestMain` moves there first.
@@ -70,10 +70,10 @@ imports one above it.**
 ```
 cmd/ob, cmd/agent-tools                 wiring, flags, output, exit codes
   rhmcp  cred                            Robinhood read-only client; credentials (phase 5)
-  wheelmcp                               the server's tools: report over the store, run records
+  obmcp                                  the server's tools: report over the store, run records
   report                                 every figure-producing command's output (CLI and tools)
   render   diff   reconcile   risk       on top of the model
-  store                                  Firestore model, importer, Source, export/verify (above snapshot)
+  store                                  the append-only store (Cloud SQL, Firestore), importer, Source, export/verify (above snapshot)
     book                                 domain model + every check
       ledger                             pure math: orders → legs, blocks, breakevens
         snapshot   history                loading, sealing, replay
@@ -87,7 +87,7 @@ cmd/ob, cmd/agent-tools                 wiring, flags, output, exit codes
 | `internal/broker` | The canonical types every adapter decodes into (`Order` with a canonical `State` beside the broker's own word, `Leg`, `Execution`, positions, `Balance`, quotes, `Instrument`, `RealizedPnL`, bars), the `Decoder` and `OrderSync` interfaces and a registry. `OrderSync` is what an order log needs of a broker: an order record's head and version key, which states are final, how a list response pages, and the text of the next pull. A number is a `Num` holding the broker's exact text, so a figure prints the same characters whichever adapter produced it |
 | `internal/broker/robinhood` | The Robinhood adapter: the only importer of `internal/rh`. Maps Robinhood's order states (queued, unconfirmed, confirmed, partially_filled and pending_cancelled are `open`) |
 | `internal/broker/conformance` | The suite every adapter's decoder must pass on its own samples |
-| `internal/layout` | Where things live in the repo layout: the directories, the file names inside a snapshot, the order logs, the config files, and the slash paths built from them (`Snapshot(id)`, `AccountFile`, `OrdersPull`, `OptionFile`, `Log(acct)`, `Bars`, `PnL`, `BookConfig`, …). Pure path computation shared by the files Source and the Firestore Source. `TestNoPathLiterals` fails the build if any other package spells a repo path or a snapshot file name |
+| `internal/layout` | Where things live in the repo layout: the directories, the file names inside a snapshot, the order logs, the config files, and the slash paths built from them (`Snapshot(id)`, `AccountFile`, `OrdersPull`, `OptionFile`, `Log(acct)`, `Bars`, `PnL`, `BookConfig`, …). Pure path computation shared by the files Source and the store Source. `TestNoPathLiterals` fails the build if any other package spells a repo path or a snapshot file name |
 | `internal/config` | `config/accounts.json` (every account: identity, source, default book, execution modes) joined with `books/<book>/book.json` (strategy, campaign start, the accounts the book covers with their pools, expected symbols and block starts) into one `Book`. Unknown fields, a full account number and an account the book doesn't own are refused |
 | `internal/rules` | A book's `books/<book>/rules.json`, validated on load. `RoundToTick`, `Tick`, `RequiredClearance`, `IsMetal` |
 | `internal/format` | The **only** place a figure is rounded for display: `USD`, `Price`, `Pct`, `Signed` |
@@ -99,7 +99,7 @@ cmd/ob, cmd/agent-tools                 wiring, flags, output, exit codes
 | `internal/rhmcp` | `ob-mcp`'s Robinhood MCP client. Only the 12 tools on `Allowlist`; a mutating name fails `TestAllowlistIsReadOnly` and panics at init. Returns `content[0].text` verbatim; follows `next` or refuses |
 | `internal/obmcp` | `ob-mcp`'s tools. Each figure-producing tool calls `report`, returns its text unchanged, and records a `run` (exit code and run id go in structured content only) |
 | `internal/gauth` | Google sign-in for `ob-mcp`: protected-resource metadata, the token + allowed-account check, source logged never gated (B6). Copied from the phase 1 spike |
-| `internal/store` | Phase 2: the storage design's Firestore collections behind a create-only `DB` (`Mem`, `Firestore` REST). `ImportRepo` from today's files; `Open` reads the store back as the repo layout (an `fs.FS` Source) and refuses it on any hash, chain or seal mismatch; `Export` / `ImportExport` / `Verify`. `storetest.Sources` gives tests every source |
+| `internal/store` | The store's collections behind a create-only `DB` with three backends: `Postgres` (`postgres.go`, one `doc` table from `postgres_schema.sql`; `NewCloudSQL` reaches Cloud SQL through the Go connector with IAM sign-in, no password), `Firestore` (REST) and `Mem` for tests. Cloud SQL is the live store; Firestore is still the code's and Terraform's default (`STORE`, `store_backend`). `ImportRepo` from today's files; `Open` reads the store back as the repo layout (an `fs.FS` Source) and refuses it on any hash, chain or seal mismatch; `Export` / `ImportExport` / `Verify`. `storetest.Sources` gives tests every source |
 | `internal/notes` | The owner's working notes (`PLAN.md`, `BUGS.md`, design docs) in a private, versioned bucket (`NOTES_BUCKET`), standard library only. A `Store` (`List`, `Read`, `Write`) with an in-memory twin for tests and a Cloud Storage JSON API client. **Every write is guarded by the generation the caller read** (`ifGenerationMatch`; 0 creates), so a stale edit is a `*ConflictError` instead of an overwrite, and the versioned bucket keeps every earlier generation. `Change` applies one of three edits (replace all, append, or replace the one place `old` occurs) to the note as read and writes it back against the same generation. **There is no delete path** at any layer, and no note is larger than 1 MiB. `obmcp`'s `notes_list`, `notes_read` and `notes_write` are the only way a Claude session reaches it, and they exist only when `NOTES_BUCKET` is set; an unusable bucket is logged and reported by the tools, never fatal to the server |
 | `internal/strategy/wheel` | The domain model — `Book → Pool → Account → Block → ShortCall/ShortPut → Closer` — and `Check` on each. Also `Ticket` (proposals) |
 | `internal/render` | Markdown wheel-book tables, golden-tested, spliced between `BEGIN/END GENERATED` markers |
@@ -254,7 +254,7 @@ deliberate decision (the owner, 11/05). Put the check on the smallest type that 
 Every loader reads through a **Source**: a read-only `fs.FS` laid out like the repo
 (`snapshots/<id>/…`, `history/…`, `reconcile/…`), paired with the snapshot's path in a
 `snapshot.At`. `snapshot.OnDisk(dir)` is the files Source; `store.Open` builds the same
-layout from Firestore documents, regenerating `history.json`, `manifest.json`, the order
+layout from the store's documents (Cloud SQL or Firestore), regenerating `history.json`, `manifest.json`, the order
 logs and `expirations.json` with the encoders that wrote them. So **a new loader must read
 through `At` / `fs.FS`, never `os`**, or it silently works on files only.
 
@@ -270,8 +270,9 @@ check-ins through the tools and requires the result to equal the file run byte f
 byte.
 
 Acceptance, golden, diff and reconcile tests loop over `storetest.Sources(t)`: `files`,
-`memory` (the repo imported into the in-memory store) and `emulator` when
-`FIRESTORE_EMULATOR_HOST` is set. A test that must hold on real data should do the same.
+`memory` (the repo imported into the in-memory store), `emulator` when
+`FIRESTORE_EMULATOR_HOST` is set, and `postgres` when `POSTGRES_DSN` names a local
+PostgreSQL 16. A test that must hold on real data should do the same.
 
 **Paths come from `internal/layout`.** Never write `"snapshots/" + id`, `"history/…"`, a
 config path, or a snapshot file name such as `"equity_quotes.json"` in non-test code: call
@@ -281,20 +282,26 @@ config path, or a snapshot file name such as `"equity_quotes.json"` in non-test 
 
 ## Storage and credentials: why it is built this way
 
-The server (`ob-mcp`, Cloud Run) keeps its data in Firestore. That store is the agent's
+The server (`ob-mcp`, Cloud Run) keeps its data in Cloud SQL for PostgreSQL (Firestore
+until 2026-11-20; the design is `docs/cloud-sql-design.md`). That store is the agent's
 **memory**, not only a copy of broker snapshots: every figure-producing call records a
 create-only `run` document, and later phases are meant to hold the agent's recommendations,
 risk checks and staged proposals the same way, so a later session can read them back.
 
-- **Append-only is enforced outside the code.** The server's service account has a custom
-  IAM role (`optionsBookInsertOnly`, `infra/gcp/main.tf`) with `datastore.entities.get`, `list`
-  and `create` and **no `update` or `delete`**. Every write is therefore a create with a
-  "must not exist" precondition, and sealing a snapshot is itself a create, so it happens
-  once and cannot be undone. A bug in the code cannot rewrite history, because the platform
-  refuses it.
+- **Append-only is enforced outside the code.** The server signs in to the database as its
+  service account (IAM database authentication, so no password exists) and is granted only
+  `SELECT` and `INSERT` on the one `doc` table: no `UPDATE`, `DELETE`, `TRUNCATE` or
+  ownership. A trigger (`internal/store/postgres_schema.sql`) also refuses `UPDATE`, `DELETE`
+  and `TRUNCATE` for every user, the owner included, so removing it would be a deliberate,
+  visible act. Every write is therefore an insert that must not already exist, and sealing a
+  snapshot is itself an insert, so it happens once and cannot be undone. `ob db
+  check-append-only` proves the refusals against a live instance, and `store.Open` and
+  `Verify` refuse any hash, chain or seal mismatch, so tampering would show. (On Firestore the
+  same rule is a custom IAM role, `optionsBookInsertOnly`, with get, list and create and no
+  update or delete.)
 - **Credentials have one writer.** The server reads the latest version of each secret and
   nothing else in Secret Manager. Only a separate job (`options-book-cred-refresher`, role in
-  `infra/gcp/credentials.tf`, no Firestore access) writes the Robinhood token, so the server
+  `infra/gcp/credentials.tf`, no database access) writes the Robinhood token, so the server
   never refreshes and there are no races. Each refresh adds a version, disables the previous
   one and destroys older ones, keeping at most two. A token is never printed, only its
   version and expiry.
@@ -423,6 +430,6 @@ canonical one (`Order.BrokerState`), and a check that compares states for *chang
 `diff` does) compares those words, not the coarser canonical state. Order sync (step 2) is behind
 `broker.OrderSync` too: `history` asks the registered sync for a record's head, which
 states are final, how a page reads and what the next pull must contain, so the log, the
-plan text and every order-page parser (`history`, `store`, `wheelmcp`) are broker-neutral.
+plan text and every order-page parser (`history`, `store`, `obmcp`) are broker-neutral.
 The Robinhood-specific pull paths (`rhmcp`, `fetch_snapshot`, `ticket` by contract, `recommend`) are
 Robinhood's by nature, and become a `Fetcher` capability when a second source needs one.

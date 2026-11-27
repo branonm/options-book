@@ -1,8 +1,8 @@
 # Store on Cloud SQL (PostgreSQL)
 
-**Status: decided 2026-11-19 by the owner; not started.** Stay on GCP and replace Firestore
-with Cloud SQL for PostgreSQL. No third-party database. Steps 1–2 may start at any time;
-steps 3–6 each wait for the owner's go-ahead.
+**Status: decided 2026-11-19 by the owner; steps 1–5 done 2026-11-20.** The live server runs on
+Cloud SQL for PostgreSQL; Firestore is no longer used by the deployment, though the code and the
+Terraform defaults still support it (step 6 is the cleanup). No third-party database.
 
 ## Why
 
