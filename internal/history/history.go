@@ -96,17 +96,22 @@ func (l *Log) head(raw []byte) (broker.OrderHead, error) { return l.sync.Head(ra
 
 // Load reads a log; a missing file is an empty log.
 func Load(path string) (*Log, error) {
+	var l *Log
 	f, err := os.Open(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return newLog(path, "")
-	}
-	if err != nil {
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		// An account with no orders has no log file, but its snapshots still
+		// record a position in it (B9).
+		if l, err = newLog(path, ""); err != nil {
+			return nil, err
+		}
+	case err != nil:
 		return nil, err
-	}
-	defer f.Close()
-	l, err := parse(path, f, "")
-	if err != nil {
-		return nil, err
+	default:
+		defer f.Close()
+		if l, err = parse(path, f, ""); err != nil {
+			return nil, err
+		}
 	}
 	// <root>/history/<account>/orders.jsonl: the snapshots sit under <root>.
 	dir := filepath.Dir(path)
@@ -124,17 +129,20 @@ func LoadFS(fsys fs.FS, name string) (*Log, error) { return LoadFSFor(fsys, name
 // adapter name, "" for the default broker). The source decides how the log reads
 // an order record's head and which states are final.
 func LoadFSFor(fsys fs.FS, name, source string) (*Log, error) {
+	var l *Log
 	f, err := fsys.Open(name)
-	if errors.Is(err, fs.ErrNotExist) {
-		return newLog(name, source)
-	}
-	if err != nil {
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		if l, err = newLog(name, source); err != nil {
+			return nil, err
+		}
+	case err != nil:
 		return nil, err
-	}
-	defer f.Close()
-	l, err := parse(name, f, source)
-	if err != nil {
-		return nil, err
+	default:
+		defer f.Close()
+		if l, err = parse(name, f, source); err != nil {
+			return nil, err
+		}
 	}
 	// history/<account>/orders.jsonl: the snapshots sit beside history/.
 	if dir := path.Dir(name); path.Base(path.Dir(dir)) == "history" {
@@ -275,6 +283,11 @@ func (l *Log) LastObserved() string {
 	}
 	return last
 }
+
+// Observed reports whether the log was ever observed complete. An account
+// with no orders has an empty log, but a snapshot's position in it (zero
+// lines) is still an observation (B9), so its pulls are incremental from then on.
+func (l *Log) Observed() bool { return l.LastObserved() != "" }
 
 // Pull is one fetch of orders: a full history, a created-since window, the
 // open-order list, or single-order lookups, possibly over several pages.
@@ -446,7 +459,7 @@ func (l *Log) Prepare(in AddInput) ([][]byte, *AddResult, error) {
 		}
 	}
 
-	if len(l.Entries) > 0 && !in.FullHistory {
+	if l.Observed() && !in.FullHistory {
 		last, err := time.Parse(time.RFC3339, l.LastObserved())
 		if err != nil {
 			return nil, nil, fmt.Errorf("log's last observed_at is unreadable: %w", err)

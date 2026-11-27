@@ -334,7 +334,7 @@ func (f *fetcher) fill(ctx context.Context, accts []account) error {
 		if err != nil {
 			return err
 		}
-		if len(l.Entries) == 0 {
+		if !l.Observed() {
 			return fmt.Errorf("the %s order log is empty: its first, full pull is done by hand (ob history add --full)", a.name)
 		}
 		plan := l.NextPlan()

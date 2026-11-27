@@ -459,11 +459,11 @@ func (im *importer) importSnapshot(s *snapFiles, chains map[string][]string) err
 			return fmt.Errorf("%s: refers to %s, not %s", p, ref.Log, LogPath(acct))
 		}
 		chain := chains[acct]
-		if ref.Lines < 1 || ref.Lines > len(chain) {
+		if ref.Lines < 0 || ref.Lines > len(chain) {
 			return fmt.Errorf("%s: %d lines, but %s has %d", p, ref.Lines, ref.Log, len(chain))
 		}
 		pos := Doc{
-			"seq": int64(ref.Lines), "chain_hash": chain[ref.Lines-1],
+			"seq": int64(ref.Lines), "chain_hash": chainAt(chain, int64(ref.Lines)),
 			"log": ref.Log, "prefix_sha256": ref.SHA256, "observed_at": ref.ObservedAt,
 		}
 		if regen, err := historyRef(pos); err != nil || !bytes.Equal(regen, b) {
@@ -474,7 +474,7 @@ func (im *importer) importSnapshot(s *snapFiles, chains map[string][]string) err
 			return err
 		}
 		im.rep.OrderPos++
-		rows = append(rows, fmt.Sprintf("%s|%d|%s", id, ref.Lines, chain[ref.Lines-1]))
+		rows = append(rows, fmt.Sprintf("%s|%d|%s", id, ref.Lines, chainAt(chain, int64(ref.Lines))))
 		manifestFiles[layout.AccountFile(acct, layout.HistoryRef)] = sum(b)
 		if ref.ObservedAt > takenAt {
 			takenAt = ref.ObservedAt

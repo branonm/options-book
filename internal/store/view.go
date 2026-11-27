@@ -134,10 +134,10 @@ func (r *reader) load() error {
 			return fmt.Errorf("%s/%s: %w", COrderPos, it.ID, err)
 		}
 		chain := r.chains[acct]
-		if seq < 1 || int(seq) > len(chain) {
+		if seq < 0 || int(seq) > len(chain) {
 			return fmt.Errorf("%s/%s: seq %d, but the %s log has %d lines", COrderPos, it.ID, seq, acct, len(chain))
 		}
-		if h, err := str(it.Doc, "chain_hash"); err != nil || h != chain[seq-1] {
+		if h, err := str(it.Doc, "chain_hash"); err != nil || h != chainAt(chain, seq) {
 			return fmt.Errorf("%s/%s: chain_hash doesn't match the %s log at seq %d", COrderPos, it.ID, acct, seq)
 		}
 		if lp, err := str(it.Doc, "log"); err != nil || lp != LogPath(acct) {
@@ -151,7 +151,7 @@ func (r *reader) load() error {
 			return fmt.Errorf("%s/%s: %w", COrderPos, it.ID, err)
 		}
 		r.put(layout.InSnapshot(snap, layout.AccountFile(acct, layout.HistoryRef)), b)
-		rows[snap] = append(rows[snap], fmt.Sprintf("%s|%d|%s", it.ID, seq, chain[seq-1]))
+		rows[snap] = append(rows[snap], fmt.Sprintf("%s|%d|%s", it.ID, seq, chainAt(chain, seq)))
 		manifests[snap][layout.AccountFile(acct, layout.HistoryRef)] = sum(b)
 	}
 

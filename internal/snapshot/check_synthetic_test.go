@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/branonm/options-book/internal/broker"
 )
 
 var refs = []AccountRef{{"roth", "Roth IRA ••0001"}, {"trad", "Traditional IRA ••0002"}}
@@ -148,4 +150,33 @@ func TestHistoryRefSnapshot(t *testing.T) {
 	if got := problems(Check(snap, refs)); !strings.Contains(got, "roth/history.json") {
 		t.Errorf("check should flag the rewritten log:\n%s", got)
 	}
+}
+
+// B9: a position of zero lines is a valid replay (an account with no orders
+// yet): no orders, and no "replays to no orders" problem.
+func TestCheckAcceptsEmptyLogPosition(t *testing.T) {
+	_, snap := copyRepo(t, "2026-02-06")
+	empty := "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" // sha256 of no bytes
+	ref := `{"log": "history/roth/orders.jsonl", "lines": 0, "sha256": "` + empty + `", "observed_at": "2026-02-06T22:00:00Z"}`
+	if err := os.WriteFile(filepath.Join(snap, "roth", "history.json"), []byte(ref), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range Check(snap, refs) {
+		if p.File == filepath.Join("roth", "history.json") {
+			t.Errorf("a zero-line position is a problem: %s: %s", p.File, p.Problem)
+		}
+	}
+	orders, _, err := loadOrders(OnDisk(snap), mustDecoder(t), "roth")
+	if err != nil || len(orders) != 0 {
+		t.Errorf("replay of zero lines = %d orders, %v; want none", len(orders), err)
+	}
+}
+
+func mustDecoder(t *testing.T) broker.Decoder {
+	t.Helper()
+	dec, err := Decoder()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dec
 }

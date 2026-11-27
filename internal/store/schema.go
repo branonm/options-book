@@ -244,3 +244,13 @@ func sum(b []byte) string {
 
 // CallFor is the source and call that produce a role's responses.
 func CallFor(role string) (source, call string) { return callFor(role) }
+
+// chainAt is the chain hash after the first seq lines: the hash of line seq,
+// or "" (the chain's seed, the prev_hash of line 1) at seq 0, the position of
+// an account whose log is still empty (B9).
+func chainAt(chain []string, seq int64) string {
+	if seq == 0 {
+		return ""
+	}
+	return chain[seq-1]
+}

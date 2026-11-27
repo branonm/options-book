@@ -186,13 +186,13 @@ func (f *alpacaFetcher) fill(ctx context.Context, account *alpacapull.Response) 
 	if err != nil {
 		return err
 	}
-	full := len(l.Entries) == 0
+	full := !l.Observed()
 	plan := l.NextPlan()
 	var observed time.Time
 	seen := map[string]bool{}
 	var pulls [][]string
 	if full {
-		fmt.Fprintf(f.log, "%s: the order log is empty, so this is a full history pull.\n", f.acct)
+		fmt.Fprintf(f.log, "%s: the order log was never observed, so this is a full history pull.\n", f.acct)
 		names, err := f.ordersFrom(ctx, "full", "", seen, &observed)
 		if err != nil {
 			return err

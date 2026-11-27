@@ -108,3 +108,43 @@ func TestQuietPullsAdvanceTheWindow(t *testing.T) {
 		t.Errorf("window after two quiet pulls = %s, want 2026-02-19", got)
 	}
 }
+
+// B9: an empty log has no file, but a snapshot's position in it (zero lines) is
+// an observation: the log counts as observed, the window moves with each quiet
+// pull, and a pull observed before the last is refused.
+func TestEmptyLogPositionIsAnObservation(t *testing.T) {
+	repo := t.TempDir()
+	logPath := filepath.Join(repo, "history", "paper", "orders.jsonl")
+	l, err := Load(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Observed() || l.LastObserved() != "" {
+		t.Fatalf("a never-pulled account is observed: %q", l.LastObserved())
+	}
+	record := func(snap, observed string) {
+		dir := filepath.Join(repo, "snapshots", snap, "paper")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		sum, _ := l.PrefixHash(0)
+		ref, _ := json.Marshal(Ref{Log: "history/paper/orders.jsonl", Lines: 0, SHA256: sum, ObservedAt: observed})
+		if err := os.WriteFile(filepath.Join(dir, "history.json"), ref, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record("2026-11-18", "2026-11-18T15:00:00Z")
+	l, _ = Load(logPath)
+	if !l.Observed() || l.LastObserved() != "2026-11-18T15:00:00Z" || l.NextPlan().CreatedSince != "2026-11-17" {
+		t.Errorf("after one empty position: observed %q, window %q", l.LastObserved(), l.NextPlan().CreatedSince)
+	}
+	record("2026-11-19", "2026-11-19T15:00:00Z")
+	l, _ = Load(logPath)
+	if got := l.NextPlan().CreatedSince; got != "2026-11-18" {
+		t.Errorf("window after two quiet pulls = %s, want 2026-11-18", got)
+	}
+	_, _, err = l.Prepare(AddInput{ObservedAt: ts("2026-11-19T10:00:00Z"), CreatedSince: ts("2026-11-18T00:00:00Z"), Pulls: []*Pull{{}}})
+	if err == nil || !strings.Contains(err.Error(), "not after the log's last observation 2026-11-19T15:00:00Z") {
+		t.Errorf("an observation before the last quiet pull: err = %v", err)
+	}
+}

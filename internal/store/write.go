@@ -379,9 +379,6 @@ func AddHistory(ctx context.Context, db DB, src *Source, in HistoryAdd) (*histor
 		}
 		prev = row
 	}
-	if len(all) == 0 {
-		return nil, fmt.Errorf("the %s log is empty; nothing to record a position in", in.Account)
-	}
 	pos := Doc{
 		"seq": int64(len(all)), "chain_hash": prev, "log": logPath,
 		"prefix_sha256": prefixHash(all), "observed_at": stamp(in.ObservedAt),
