@@ -17,9 +17,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Postgres is a DB over one PostgreSQL table (docs/cloud-sql-design.md). Like
-// Firestore it only ever creates a document, reads one, or lists a
-// collection: no update or delete statement exists here, and the schema
+// Postgres is a DB over one PostgreSQL table (docs/cloud-sql-design.md). It
+// only ever creates a document, reads one, or lists a collection: no update or delete statement exists here, and the schema
 // refuses them too (a trigger for everyone, and a server user that is granted
 // SELECT and INSERT only).
 //
@@ -118,7 +117,7 @@ func (p *Postgres) Get(ctx context.Context, coll, id string) (Doc, error) {
 	return d, nil
 }
 
-// List sorts in byte order (COLLATE "C"), the order Mem and Firestore give.
+// List sorts in byte order (COLLATE "C"), the order Mem gives.
 func (p *Postgres) List(ctx context.Context, coll string) ([]Item, error) {
 	rows, err := p.pool.Query(ctx, `SELECT id, fields FROM doc WHERE coll = $1 ORDER BY id COLLATE "C"`, coll)
 	if err != nil {

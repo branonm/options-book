@@ -40,9 +40,9 @@ func (b bearer) RoundTrip(r *http.Request) (*http.Response, error) {
 // the tools over stateless streamable HTTP, against the repo in a store.
 func TestServerOverHTTP(t *testing.T) {
 	ctx := context.Background()
-	// The emulator path needs no credentials; its store is then swapped for the
+	// The config alone needs no store or credentials; the store is then the
 	// repo imported into memory, keeping the parsed compiled-in config.
-	deps, err := newDeps("test-project", "(default)", "localhost:1", time.Hour)
+	deps, err := newDepsConfig(storeConfig{}, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestServerOverHTTP(t *testing.T) {
 
 // The compiled-in config is the repo's config, byte for byte.
 func TestCompiledInConfig(t *testing.T) {
-	deps, err := newDeps("p", "(default)", "localhost:1", time.Minute)
+	deps, err := newDepsConfig(storeConfig{}, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,18 +129,22 @@ func TestCompiledInConfig(t *testing.T) {
 	}
 }
 
-// The store is chosen by configuration; Firestore stays the default. Nothing
-// here reaches a network: the Cloud SQL and Firestore constructors are not
-// called on these paths.
+// The store is chosen by configuration; Cloud SQL is the default. Nothing
+// here reaches a network: the Cloud SQL constructor is not called on these
+// paths.
 func TestStoreSelection(t *testing.T) {
-	if _, err := newDepsStore("p", "(default)", "", storeConfig{Kind: "mysql"}, time.Minute); err == nil ||
-		!strings.Contains(err.Error(), "want firestore, cloudsql or postgres") {
+	if _, err := newDepsStore("p", storeConfig{Kind: "mysql"}, time.Minute); err == nil ||
+		!strings.Contains(err.Error(), "want cloudsql or postgres") {
 		t.Errorf("an unknown store: %v", err)
 	}
-	if _, err := newDepsStore("p", "(default)", "", storeConfig{Kind: "cloudsql", Instance: "p:r:i"}, time.Minute); err == nil {
+	if _, err := newDepsStore("p", storeConfig{Kind: "cloudsql", Instance: "p:r:i"}, time.Minute); err == nil {
 		t.Error("cloudsql without a database and user was accepted")
 	}
-	if _, err := newDepsStore("p", "(default)", "", storeConfig{Kind: "postgres"}, time.Minute); err == nil {
+	// Unset STORE is Cloud SQL, not a silent fallback to anything else.
+	if _, err := newDepsStore("p", storeConfig{}, time.Minute); err == nil {
+		t.Error("an unset STORE with no Cloud SQL instance was accepted")
+	}
+	if _, err := newDepsStore("p", storeConfig{Kind: "postgres"}, time.Minute); err == nil {
 		t.Error("postgres without a DSN was accepted")
 	}
 }
@@ -150,7 +154,7 @@ func TestStorePostgresLocal(t *testing.T) {
 	if dsn == "" {
 		t.Skip("POSTGRES_DSN not set")
 	}
-	deps, err := newDepsStore("p", "(default)", "", storeConfig{Kind: "postgres", DSN: dsn}, time.Minute)
+	deps, err := newDepsStore("p", storeConfig{Kind: "postgres", DSN: dsn}, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}

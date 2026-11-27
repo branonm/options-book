@@ -1,8 +1,8 @@
 # Store on Cloud SQL (PostgreSQL)
 
-**Status: decided 2026-11-19 by the owner; steps 1–5 done 2026-11-20.** The live server runs on
-Cloud SQL for PostgreSQL; Firestore is no longer used by the deployment, though the code and the
-Terraform defaults still support it (step 6 is the cleanup). No third-party database.
+**Status: decided 2026-11-19 by the owner; steps 1–5 done 2026-11-20; step 6 (removing Firestore from
+the code, the CLI, the server and the Terraform) is in the code as of 2026-11-26; the live plan and deploy are the owner's.** Cloud SQL for PostgreSQL is the only
+store. No third-party database. Where this document says "today" of Firestore, read it as history.
 
 ## Why
 
@@ -18,7 +18,7 @@ Terraform defaults still support it (step 6 is the cleanup). No third-party data
 The store already sits behind a three-call, create-only interface (`internal/store/db.go`):
 `Create` (or `ErrExists`), `Get`, and `List` sorted by id, over collections of `Doc`s whose
 values are only `string`, `int64`, `bool` or `[]byte`. The Firestore backend
-(`internal/store/firestore.go`) uses no transactions or batches. So this is **a new backend,
+(removed in step 6) used no transactions or batches. So this is **a new backend,
 not a redesign**:
 
 - every collection, document id and field stays as it is (`internal/store/schema.go`);
@@ -26,7 +26,7 @@ not a redesign**:
   `ImportExport`, `Verify`, the server's write tools, and the shared checks
   (`history.Log.Prepare`, `snapshot.CheckAt`) are untouched;
 - `Mem` stays the in-memory test backend, and `storetest.Sources` gains a `postgres`
-  source alongside `files`, `memory` and `emulator`.
+  source alongside `files` and `memory` (and the Firestore `emulator`, removed in step 6).
 
 ## Schema: one table now, typed views for querying
 
@@ -43,7 +43,7 @@ CREATE TABLE doc (
 - **One generic table, not a table per collection.** It maps one-to-one onto the
   interface: `Create` is `INSERT … ON CONFLICT DO NOTHING` (zero rows inserted →
   `ErrExists`), `Get` is a primary-key lookup, and `List` is
-  `WHERE coll = $1 ORDER BY id COLLATE "C"`. Byte order matches `Mem`'s and Firestore's
+  `WHERE coll = $1 ORDER BY id COLLATE "C"`. Byte order matches `Mem`'s (and Firestore's, while it lasted)
   sort; a test must prove that rather than assume it.
 - **Every field keeps a type tag**, so an `int64` never becomes a float and `[]byte`
   round-trips exactly. Money stays a string, exactly as the broker sent it.
@@ -112,7 +112,7 @@ files on every source, the diff and reconcile tests, `TestToolsMatchCLI` and
 | 3. Infrastructure | Terraform: the instance, the IAM database user, `roles/cloudsql.client` for the server's service account, the raised budget | The owner runs `terraform apply`. A test connecting as the server's user shows `UPDATE` and `DELETE` refused |
 | 4. Move the data | `ob db export` from Firestore → `ob db import` into Cloud SQL → `ob db verify` | The Cloud SQL export is **byte-identical** to the Firestore export |
 | 5. Switch the server | `ob-mcp` takes a store flag (`firestore` or `postgres`); deploy | A live check-in done through the server matches the same check-in done with the file tools, byte for byte |
-| 6. Retire Firestore | Remove the Firestore backend from the server, then the database and its IAM role | After a period the owner chooses; the last Firestore export is kept |
+| 6. Retire Firestore | Remove the Firestore backend, the CLI's `--emulator` and `--project` store flags, the server's fallback to it, and the Terraform database, API and insert-only role | **Code and Terraform changed 2026-11-26** (build, vet and test pass with and without `POSTGRES_DSN`; the replay gate passes on `postgres`). **Open:** the owner's live `terraform plan` must show no changes, and the deploy |
 
 Steps 1 and 2 are offline and can start at any time. Steps 3–6 touch the live server, and
 each waits for the owner's go-ahead.
@@ -122,6 +122,6 @@ each waits for the owner's go-ahead.
 - `ARCHITECTURE.md`, "Storage and credentials: why it is built this way": the insert-only
   IAM role becomes the three layers above, and `internal/store`'s entry names the Postgres
   backend.
-- `README.md`: `ob db` works against Cloud SQL as well as Firestore.
-- `infra/gcp/main.tf`: `google_firestore_database.main` and the insert-only role go in
-  step 6.
+- `README.md`: `ob db` works against Cloud SQL, and the Storage section describes it.
+- `infra/gcp/main.tf`: `google_firestore_database.main` and the insert-only role went in
+  step 6, with `enable_firestore`, `store_backend` and `enable_cloudsql`.

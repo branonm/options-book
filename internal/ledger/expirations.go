@@ -148,6 +148,6 @@ func callAwayReset(legs []Leg, symbol string) (string, string) {
 }
 
 // ExpirationsDoc is the _doc line history/expirations.json is written with.
-// The Firestore Source regenerates the file with it, so it must not change
+// The store Source regenerates the file with it, so it must not change
 // without re-importing.
 const ExpirationsDoc = "How contracts that ran through expiration without a closing order finished: the underlying's regular-session close on the expiration date. In the money = assigned. Append-only; written by `wheel expirations`."

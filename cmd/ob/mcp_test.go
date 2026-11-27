@@ -22,7 +22,7 @@ import (
 )
 
 // The store spec the CLI and the server both use in these tests.
-const memSpec = "emulator=memory-test"
+const memSpec = "cloudsql=memory-test"
 
 // mcpSession serves the ob-mcp tools over an in-memory MCP connection,
 // against the repo imported into an in-memory store.
@@ -208,9 +208,9 @@ func TestToolsMatchCLI(t *testing.T) {
 	}
 
 	// Store-wide tools first, before any run documents change the export size.
-	c := cli(t, noCode(runDB), "verify", "--emulator", "memory-test")
+	c := cli(t, noCode(runDB), "verify", "--cloudsql", "memory-test")
 	same("verify", c, callTool(t, cs, "verify", nil))
-	c = cli(t, noCode(runDB), "list", "--emulator", "memory-test")
+	c = cli(t, noCode(runDB), "list", "--cloudsql", "memory-test")
 	same("list_snapshots", c, callTool(t, cs, "list_snapshots", nil))
 
 	ids := snapshotIDs(t)
@@ -232,7 +232,7 @@ func TestToolsMatchCLI(t *testing.T) {
 		same("book "+id, c, callTool(t, cs, "book", map[string]any{"snapshot": id}))
 
 		raw := []string{"roth/equity_positions.json", "equity_quotes.json"}
-		c = cli(t, noCode(runDB), "show", "--emulator", "memory-test", "--snapshot", id, "--raw", raw[0], "--raw", raw[1])
+		c = cli(t, noCode(runDB), "show", "--cloudsql", "memory-test", "--snapshot", id, "--raw", raw[0], "--raw", raw[1])
 		same("get_snapshot "+id, c, callTool(t, cs, "get_snapshot", map[string]any{"snapshot": id, "raw": raw}))
 	}
 	for i := 1; i < len(ids); i++ {

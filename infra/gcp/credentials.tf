@@ -6,7 +6,7 @@
 #   ob-mcp    reads the latest version of both, and nothing else in
 #                Secret Manager. The server never refreshes.
 #   refresher    options-book-cred-refresher: reads, adds, lists, disables and
-#                destroys versions of robinhood-oauth only. No Firestore, no
+#                destroys versions of robinhood-oauth only. No store access, no
 #                other secret. Only it (and the owner) write robinhood-oauth.
 #   job          options-book-cred-refresh: the server image running
 #                `ob cred refresh robinhood`, as the refresher.

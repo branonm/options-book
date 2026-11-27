@@ -56,7 +56,7 @@ type Deps struct {
 	Accounts    *config.Accounts
 	AccountsSHA string
 	DB          store.DB
-	Spec        string        // how `wheel` names this store, e.g. firestore=options-book
+	Spec        string        // how `wheel` names this store, e.g. cloudsql=INSTANCE/DATABASE
 	Commit      string        // the server's git commit, recorded on every run
 	CacheTTL    time.Duration // how long an opened store is reused; 0 reopens every call
 	Now         func() time.Time

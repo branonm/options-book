@@ -13,7 +13,7 @@
 //	books/<book>/{book,rules}.json   a book: its strategy, accounts and rules
 //
 // The same layout is what every Source presents: the files on disk and the
-// documents of the Firestore store both read as these paths, so a path is
+// documents of the store both read as these paths, so a path is
 // computed here and nowhere else. A test (TestNoPathLiterals) fails the build
 // if a literal path or snapshot file name appears outside this package.
 //

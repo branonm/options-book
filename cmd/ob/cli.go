@@ -154,7 +154,7 @@ func runDiff(args []string) error {
 	to := fs.String("to", "", "later snapshot folder")
 	var bf bookFlags
 	bf.register(fs)
-	source := fs.String("source", "files", "where the snapshots are read from: files | emulator=HOST:PORT | firestore=PROJECT (read-only)")
+	source := fs.String("source", "files", "where the snapshots are read from: files | postgres=DSN | cloudsql=INSTANCE/DATABASE/USER (read-only)")
 	fs.Parse(args)
 	if *from == "" || *to == "" {
 		usage()
